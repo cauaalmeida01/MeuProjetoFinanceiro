@@ -1,0 +1,10 @@
+# Dados financeiros pessoais: nunca vão para o GitHub
+dados/
+painel/index.html
+*.psv
+*.bak
+.env
+
+# Sistema
+.DS_Store
+__pycache__/

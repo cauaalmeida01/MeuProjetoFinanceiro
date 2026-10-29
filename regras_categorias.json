@@ -1,0 +1,270 @@
+{
+  "_como_usar": "Regras por estabelecimento (sem dados pessoais, pode ir para o GitHub). Se a descrição contiver o trecho, a transação cai na categoria; a primeira que bater vence. Pessoas e regras específicas suas ficam em dados/regras_pessoais.json, que não é versionado. O que não bater em nada vai para 'Outros'. Depois de editar: python3 scripts/gerar_painel.py",
+  "categorias": [
+    [
+      "Moradia",
+      [
+        "condominio",
+        "condomínio",
+        "aluguel",
+        "coelba",
+        "neoenergia",
+        "embasa",
+        "energia eletrica",
+        "faxina",
+        "diarista"
+      ]
+    ],
+    [
+      "Compras",
+      [
+        "mercado livre",
+        "mercadolivre",
+        "shopee",
+        "amazon",
+        "renner",
+        "hurley",
+        "magalu",
+        "shein",
+        "netshoes",
+        "centauro",
+        "riachuelo",
+        "c&a",
+        "vivara",
+        "polo wear",
+        "eletro"
+      ]
+    ],
+    [
+      "Mercado",
+      [
+        "vlos comercio",
+        "atacadao",
+        "atacadão",
+        "assai",
+        "assaí",
+        "supermercado",
+        "hortifruti",
+        "gbarbosa",
+        "carrefour",
+        "l c m comercio varejista de alimentos",
+        "mercadinho",
+        "mercearia",
+        "super nosso",
+        "hiperideal",
+        "feira getulio vargas"
+      ]
+    ],
+    [
+      "Alimentação",
+      [
+        "ifood",
+        "ifd*",
+        "99 food",
+        "meiodia",
+        "arcos dourados",
+        "mcdonald",
+        "burger king",
+        "lanche",
+        "xika",
+        "acai",
+        "açai",
+        "açaí",
+        "acaiteria",
+        "contem frango",
+        "padaria",
+        "panificacao",
+        "pizzaria",
+        "pizza",
+        "restaurante",
+        "refeic",
+        "cantina",
+        "zamp",
+        "garnet",
+        "atelier do sabor",
+        "smash",
+        "pastel",
+        "cafe ",
+        "café",
+        "sorvete",
+        "churrasc",
+        "hamburg",
+        "subway",
+        "bobs",
+        "spoleto",
+        "habib",
+        "cazolla",
+        "espeto",
+        "comercio de alimento",
+        "restro",
+        "comercio de cafe",
+        "cafelier",
+        "burger",
+        "chocolates",
+        "doces finos",
+        "espetinho",
+        "gelateria",
+        "churrasq",
+        "restauran",
+        "mc donald",
+        "grill",
+        "doceria",
+        "docepao",
+        "alimentos",
+        "bali pajucara",
+        "plato bar",
+        "barmercado"
+      ]
+    ],
+    [
+      "Bebidas e festas",
+      [
+        "deposito de bebidas",
+        "depósito de bebidas",
+        "comercio de bebidas",
+        "tropical deposito",
+        "distribuidora de bebidas",
+        "adega",
+        "conveniencia",
+        "bebidas"
+      ]
+    ],
+    [
+      "Transporte",
+      [
+        "uber",
+        "99 tecnologia",
+        "99app",
+        "99 pop",
+        "meio de transporte",
+        "blablacar",
+        "comuto",
+        "posto ",
+        "combustiv",
+        "shell",
+        "ipiranga",
+        "zul digital",
+        "estacionamento",
+        "telesalvador",
+        "metro",
+        "metrô",
+        "onibus",
+        "ônibus",
+        "bus servicos de agendamento",
+        "buser"
+      ]
+    ],
+    [
+      "Lazer e eventos",
+      [
+        "ingresse",
+        "sympla",
+        "cinema",
+        "cinemark",
+        "eventim",
+        "ticket",
+        "ingresso",
+        "show",
+        "tkt eventos",
+        "tootz",
+        "cinesercla",
+        "zigpay",
+        "entretenimento",
+        "pp beach",
+        "zig*",
+        "entertainment"
+      ]
+    ],
+    [
+      "Jogos e apps",
+      [
+        "mc games",
+        "sprbt",
+        "pagsmile",
+        "bytedance",
+        "pix marketplace",
+        "steam",
+        "playstation",
+        "xbox",
+        "nintendo",
+        "google",
+        "apple",
+        "netflix",
+        "spotify",
+        "riot",
+        "garena",
+        "valve"
+      ]
+    ],
+    [
+      "Apostas",
+      [
+        "stake",
+        "novibet",
+        "betmgm",
+        "bet365",
+        "betano",
+        "sportingbet",
+        "pixbet",
+        "blaze",
+        "estrelabet",
+        "superbet",
+        "betnacional"
+      ]
+    ],
+    [
+      "Cuidados pessoais",
+      [
+        "barbearia",
+        "salao",
+        "salão",
+        "cabeleireiro",
+        "estetica"
+      ]
+    ],
+    [
+      "Saúde",
+      [
+        "farmacia",
+        "farmácia",
+        "drogasil",
+        "drogaria",
+        "pague menos",
+        "clinica",
+        "clínica",
+        "laborat",
+        "hospital",
+        "odonto",
+        "growth supplements",
+        "suplemento"
+      ]
+    ],
+    [
+      "Educação",
+      [
+        "escola",
+        "curso",
+        "faculdade",
+        "universidade",
+        "livraria",
+        "udemy",
+        "alura",
+        "formacao de condutores",
+        "autoescola",
+        "auto escola",
+        "sociedade brasileira de computacao"
+      ]
+    ],
+    [
+      "Tecnologia e sites",
+      [
+        "hostgator",
+        "hypertech",
+        "hostinger",
+        "registro.br",
+        "github",
+        "godaddy"
+      ]
+    ]
+  ]
+}
