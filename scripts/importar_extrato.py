@@ -28,7 +28,13 @@ def main():
     novo = ler(sys.argv[1])
     if not novo:
         sys.exit("O arquivo novo está vazio.")
-    inicio = min(l["data"] for l in novo)
+    juntar(novo)
+
+
+def juntar(novo, inicio=None):
+    """Troca o histórico a partir de `inicio` (padrão: primeira data de `novo`) pelas linhas de `novo`."""
+    inicio = inicio or min(l["data"] for l in novo)
+    novo = [l for l in novo if l["data"] >= inicio]
     antigo = ler(HISTORICO) if HISTORICO.exists() else []
     mantidos = [l for l in antigo if l["data"] < inicio]
     linhas = sorted(mantidos + novo, key=lambda l: l["data"])

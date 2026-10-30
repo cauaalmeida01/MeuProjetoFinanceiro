@@ -66,6 +66,7 @@ select{background:var(--surface-2);border:1px solid var(--line);border-radius:8p
 .theme button{border:0;background:transparent;border-radius:999px;padding:5px 12px;cursor:pointer;font-size:.82rem;color:var(--muted)}
 .theme button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:0 0 0 1px var(--line)}
 .top-right{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.synced{font-size:.78rem;color:var(--muted)}
 .chip:disabled{opacity:.35;cursor:not-allowed}
 .seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
 .seg button{border:0;background:var(--surface-2);padding:6px 12px;cursor:pointer;font-size:.85rem}
@@ -206,6 +207,7 @@ td.v.tr{color:var(--muted)}
       <p>Seu extrato do Inter desde a abertura da conta. Clique numa barra para abrir o mês, numa categoria para filtrar, num dia do calendário ou num destino para ver as transações.</p>
     </div>
     <div class="top-right">
+      <span class="synced" id="synced" hidden></span>
       <span class="sample" id="src-badge"><i style="background:var(--in)"></i>Dados reais · só no seu computador</span>
       <div class="theme" id="theme" role="group" aria-label="Tema">
         <button type="button" data-t="light">Claro</button>
@@ -418,6 +420,7 @@ td.v.tr{color:var(--muted)}
 const RAW=/*__DADOS__*/[];
 const XP=/*__XP__*/null;
 const INV=/*__INTERINV__*/null;
+const SYNC=/*__SYNC__*/null;
 const MES=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 const MES_L=['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
 const DOW=['domingo','segunda','terça','quarta','quinta','sexta','sábado'];
@@ -427,7 +430,7 @@ const fmtK=v=>Math.abs(v)>=1000?'R$ '+(v/1000).toLocaleString('pt-BR',{maximumFr
 const pct=v=>(v*100).toLocaleString('pt-BR',{maximumFractionDigits:1})+'%';
 const cap=s=>s[0].toUpperCase()+s.slice(1);
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const pctN=(v,d=2)=>v.toLocaleString('pt-BR',{maximumFractionDigits:d,minimumFractionDigits:d?Math.min(d,2):0})+'%';
+const pctN=(v,d=2)=>v==null?'—':v.toLocaleString('pt-BR',{maximumFractionDigits:d,minimumFractionDigits:d?Math.min(d,2):0})+'%';
 const sgn=v=>(v>=0?'+':'−')+fmt(Math.abs(v));
 const cl=v=>v>=0?'pos':'neg';
 const dmY=s=>s.split('-').reverse().join('/');
@@ -753,10 +756,10 @@ function drawInv(){
   XP.posicoes.forEach(p=>(grupos[p.classe]??=[]).push(p));
   $('xp-total').textContent=fmt(tot)+' investidos';
   $('xp-pos').innerHTML=Object.entries(grupos).map(([c,ps])=>{const v=ps.reduce((x,p)=>x+p.valor,0);
-    return `<div class="xp-cls"><header><span>${c}</span><span class="num">${fmt(v)} · ${pct(v/tot)}</span></header>`+ps.map(p=>{const r=p.valor-p.aplicado;
-      return `<div class="xp-a"><span class="nm">${esc(p.ativo)}</span><span class="num">${fmt(p.valor)}</span><span class="in2">${esc(p.sub)} · ${esc(p.info)}</span><span class="rs num ${cl(r)}">${sgn(r)} (${pctN(r/p.aplicado*100)})</span><span class="bar"><span style="width:${p.valor/tot*100}%"></span></span></div>`}).join('')+'</div>'}).join('');
+    return `<div class="xp-cls"><header><span>${c}</span><span class="num">${fmt(v)} · ${pct(v/tot)}</span></header>`+ps.map(p=>{const r=p.aplicado==null?null:p.valor-p.aplicado;
+      return `<div class="xp-a"><span class="nm">${esc(p.ativo)}</span><span class="num">${fmt(p.valor)}</span><span class="in2">${esc(p.sub)} · ${esc(p.info)}</span><span class="rs num ${r==null?'':cl(r)}">${r==null?'preço médio não informado':`${sgn(r)} (${pctN(r/p.aplicado*100)})`}</span><span class="bar"><span style="width:${p.valor/tot*100}%"></span></span></div>`}).join('')+'</div>'}).join('');
   $('inv-note').textContent='Os valores da XP vêm do portal deles: patrimônio a mercado, rendimento já descontado de taxas e % do CDI calculado pela XP. Os Pix do Inter para o seu nome só contam como envio para a XP quando aparecem no extrato de lá; os outros ficam como "Entre suas contas".';
-  $('src-xp').textContent=`Posição, ${xm.length} meses de evolução e lançamentos recentes, coletados em ${dmY(XP.atualizado_em)}.`;
+  $('src-xp').textContent=`Posição e lançamentos de ${dmY(XP.atualizado_em)} · ${xm.length} meses de evolução · rentabilidade e % do CDI do portal XP em ${dmY(XP.performance_em||XP.atualizado_em)}.`;
 }
 
 const invTotal=()=>(INV?INV.total:0)+(XP?XP.patrimonio:0);
@@ -801,6 +804,8 @@ $('theme').addEventListener('click',e=>{const b=e.target.closest('button');if(!b
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change',()=>{drawTheme();drawCharts()});
 new MutationObserver(drawCharts).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
 drawTheme();
+if(SYNC){const d=new Date(SYNC);$('synced').hidden=false;
+  $('synced').textContent=`Atualizado a última vez: ${d.toLocaleDateString('pt-BR')} às ${d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}`}
 
 function render(){drawFilters();drawKpis();drawCharts();drawInsights();drawCal();drawTable();drawTop();drawInv()}
 render();

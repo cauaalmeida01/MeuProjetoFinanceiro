@@ -20,6 +20,7 @@ REGRAS = RAIZ / "regras_categorias.json"
 REGRAS_PESSOAIS = RAIZ / "dados" / "regras_pessoais.json"
 XP = RAIZ / "dados" / "xp.json"
 INTER_INV = RAIZ / "dados" / "inter_invest.json"
+PLUGGY = RAIZ / "dados" / "pluggy_investimentos.json"
 BASE = RAIZ / "painel" / "base.html"
 SAIDA_JSON = RAIZ / "dados" / "transacoes.json"
 SAIDA_HTML = RAIZ / "painel" / "index.html"
@@ -112,6 +113,13 @@ def carregar_inter_inv(tx):
     return {k: v for k, v in inv.items() if not k.startswith("_")}
 
 
+def ultima_sincronizacao():
+    """Data e hora da última sincronização com a Pluggy, gravada por sincronizar_pluggy.py."""
+    if not PLUGGY.exists():
+        return None
+    return json.loads(PLUGGY.read_text(encoding="utf-8")).get("sincronizado_em")
+
+
 def classificar(data, titulo, desc, valor, cats, destinos, origens, eu, conc):
     """Devolve (tipo, categoria). tipo: entrada | saida | aporte | resgate | transf."""
     d = desc.lower()
@@ -164,7 +172,8 @@ def main():
     html = (BASE.read_text(encoding="utf-8")
             .replace("/*__DADOS__*/[]", json.dumps(tx, ensure_ascii=False))
             .replace("/*__XP__*/null", json.dumps(xp_painel, ensure_ascii=False))
-            .replace("/*__INTERINV__*/null", json.dumps(carregar_inter_inv(tx), ensure_ascii=False)))
+            .replace("/*__INTERINV__*/null", json.dumps(carregar_inter_inv(tx), ensure_ascii=False))
+            .replace("/*__SYNC__*/null", json.dumps(ultima_sincronizacao())))
     SAIDA_HTML.write_text(html, encoding="utf-8")
 
     # resumo no terminal
