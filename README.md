@@ -9,6 +9,10 @@ regras_categorias.json      regras por estabelecimento (iFood → Alimentação�
 scripts/gerar_painel.py     classifica o extrato e gera o painel
 scripts/importar_extrato.py junta um extrato novo ao histórico
 scripts/sincronizar_pluggy.py busca o extrato na Pluggy e gera o painel
+scripts/indices_bcb.py       baixa CDI e IPCA do Banco Central
+scripts/radar_b3.py          Radar B3: cotações, proventos e fundamentos das suas ações
+scripts/servidor.py          abre o painel com os botões (adicionar ação, analisar, sincronizar)
+.claude/skills/analisar-acao skill /analisar-acao TICKER (relatório de pesquisa em português)
 scripts/agendar_sincronizacao.sh liga/desliga a sincronização diária no Mac
 painel/base.html            o painel (HTML + gráficos), sem dados
 template/livro-caixa.html   versão de demonstração com dados fictícios
@@ -21,6 +25,21 @@ dados/                      NÃO vai para o GitHub
   transacoes.json           gerado
 painel/index.html           gerado, com seus dados (NÃO vai para o GitHub)
 ```
+
+## Abrir o painel com os botões
+
+```bash
+python3 scripts/servidor.py
+```
+
+O comando abre `http://127.0.0.1:8765` no navegador. Para parar, use Ctrl+C. Com o servidor rodando, o painel ganha alguns botões:
+- **Sincronizar agora**, no topo;
+- **Adicionar ação**, **Analisar**, **Último relatório** e **Remover**, no Radar B3;
+- a lista de relatórios, que abrem dentro do próprio painel.
+
+O **Analisar** roda `claude -p "/analisar-acao TICKER"` em segundo plano. Leva alguns minutos e usa a sua conta do Claude Code. Durante a análise, o Claude só tem permissão para rodar o `radar_b3.py`, buscar na web e salvar o relatório. O log fica em `dados/relatorios/.log-TICKER.txt`.
+
+O servidor só aceita conexões do próprio computador. Se você prefere o Go Live (Live Server) do VS Code, os botões também aparecem lá, contanto que o `servidor.py` esteja rodando em outro terminal: o painel procura o servidor na porta 8765. Sem o servidor, o painel mostra uma dica de como ligá-lo. Aberto como arquivo, ele funciona igual, só que sem os botões.
 
 ## Gerar o painel
 
@@ -48,7 +67,27 @@ scripts/agendar_sincronizacao.sh               # liga a sincronização diária 
 scripts/agendar_sincronizacao.sh remover       # desliga
 ```
 
-O histórico antigo continua em `dados/inter_extrato.psv`; só o período que a Pluggy cobre é substituído. Da XP vêm as posições, o saldo, os proventos e os Pix recebidos do Inter (que entram na conciliação de `envios_inter_para_xp`), gravados em `dados/xp.json`. A cada mês o script guarda o patrimônio da XP em `fotos_mensais` e, a partir de novembro de 2026, calcula aportes e rendimento do mês; a rentabilidade acumulada e o % do CDI continuam os do portal da XP em 28/10/2026. O log da execução diária fica em `dados/sincronizacao.log`. A autorização do Open Finance vence em até 12 meses e precisa ser renovada no Meu Pluggy.
+O histórico antigo continua em `dados/inter_extrato.psv`; só o período que a Pluggy cobre é substituído. Da XP vêm as posições, o saldo, os proventos e os Pix recebidos do Inter (que entram na conciliação de `envios_inter_para_xp`), gravados em `dados/xp.json`. A cada mês o script guarda o patrimônio da XP em `fotos_mensais` e, a partir de novembro de 2026, calcula aportes e rendimento do mês; a rentabilidade acumulada e o % do CDI são recalculados com o CDI e o IPCA da API pública do Banco Central (`scripts/indices_bcb.py`, salvos em `dados/indices.json`). Encadeando os meses do portal da XP, esse cálculo dá 115,99% do CDI desde a abertura, contra 116,02% do portal. O log da execução diária fica em `dados/sincronizacao.log`. A autorização do Open Finance vence em até 12 meses e precisa ser renovada no Meu Pluggy.
+
+## Radar B3 e /analisar-acao
+
+O Radar B3 mostra, para as ações da sua carteira na XP e as que você acompanha:
+- preço e retorno em 1, 3 e 12 meses comparados ao Ibovespa e ao CDI;
+- distância da máxima do ano, volatilidade e maior queda;
+- dividend yield de 12 meses;
+- P/L, P/VP, ROE, margem e dívida/patrimônio.
+
+Ele é atualizado em cada sincronização. Não é recomendação de compra ou venda.
+
+```bash
+python3 scripts/radar_b3.py --adicionar WEGE3 VALE3   # acompanhar
+python3 scripts/radar_b3.py --remover WEGE3           # parar de acompanhar
+python3 scripts/radar_b3.py                           # atualizar agora
+```
+
+As cotações e os proventos vêm do Yahoo Finance. Os indicadores (P/L, P/VP, ROE, margem e dívida líquida) vêm do [Fundamentus](https://www.fundamentus.com.br). Nenhum dos dois precisa de chave. Da [brapi.dev](https://brapi.dev) vêm o setor e a descrição da empresa, com o `BRAPI_TOKEN` no `.env`. O plano grátis dela não libera os indicadores.
+
+Com o Claude Code aberto nesta pasta, `/analisar-acao PETR4` monta um relatório de pesquisa em `dados/relatorios/`, com números, comparação com o setor, notícias, pontos a favor e contra e riscos. Não traz veredito de compra ou venda.
 
 ## Atualizar à mão
 

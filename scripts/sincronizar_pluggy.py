@@ -21,6 +21,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import gerar_painel  # noqa: E402
 import importar_extrato  # noqa: E402
+import indices_bcb  # noqa: E402
+import radar_b3  # noqa: E402
 
 RAIZ = Path(__file__).resolve().parent.parent
 ENV = RAIZ / ".env"
@@ -197,20 +199,23 @@ def atualizar_xp(pluggy, contas, posicoes, eu):
     # evolução mensal: guarda o patrimônio do fim de cada mês e, a partir do mês seguinte
     # à última linha do portal, calcula o mês com aportes e rendimento
     fotos = xp.setdefault("fotos_mensais", {})
+    # cada foto é [data, patrimônio]; a do mês vai sendo trocada até a última sincronização dele
+    fotos.update({m: [m + "-28", v] for m, v in fotos.items() if not isinstance(v, list)})
     mes = hoje.strftime("%Y-%m")
-    fotos[mes] = xp["patrimonio"]
+    fotos[mes] = [hoje.isoformat(), xp["patrimonio"]]
     ultimo_portal = max(r["data"][:7] for r in xp["mensal"] if r.get("fonte") != "pluggy")
     xp["mensal"] = [r for r in xp["mensal"] if r.get("fonte") != "pluggy"]
     for m in sorted(fotos):
         anterior = (date.fromisoformat(m + "-01") - timedelta(days=1)).strftime("%Y-%m")
         if m <= ultimo_portal or anterior not in fotos:
             continue
-        aportes = sum(t["amount"] for t in invest if dia(t["date"]).strftime("%Y-%m") == m
+        (desde, inicial), (ate, final) = fotos[anterior], fotos[m]
+        aportes = sum(t["amount"] for t in invest if desde < dia(t["date"]).isoformat() <= ate
                       and lancamento_xp(t)[1] == "transferencia")
-        inicial, final = fotos[anterior], fotos[m]
         rend = final - inicial - aportes
         base = inicial + max(aportes, 0)
-        xp["mensal"].append({"data": hoje.isoformat() if m == mes else m + "-28", "inicial": inicial,
+        # o % do CDI de cada mês é calculado pelo gerar_painel.py com o CDI do Banco Central
+        xp["mensal"].append({"data": ate, "desde": desde, "inicial": inicial,
                              "aportes_liquidos": round(aportes, 2), "rendimento": round(rend, 2), "final": final,
                              "rent_pct": round(rend / base * 100, 2) if base else 0, "pct_cdi": None,
                              "fonte": "pluggy"})
@@ -256,6 +261,15 @@ def main():
         importar_extrato.juntar(linhas, inicio)
     else:
         print("Nenhuma transação do Inter veio da Pluggy; o histórico ficou como estava.")
+    try:
+        ind = indices_bcb.atualizar()
+        print(f"CDI até {max(ind['cdi'])} · IPCA até {max(ind['ipca'])} (Banco Central)")
+    except Exception as e:  # sem o Banco Central o painel usa os índices da última vez
+        print(f"Atenção: não deu para atualizar CDI/IPCA ({e})")
+    try:
+        radar_b3.main([])
+    except Exception as e:  # idem para o Radar B3
+        print(f"Atenção: não deu para atualizar o Radar B3 ({e})")
     print()
     gerar_painel.main()
 

@@ -1,3 +1,6 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
 <meta charset="utf-8">
 <title>Meu Livro-Caixa</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -186,6 +189,47 @@ td.v.tr{color:var(--muted)}
 .xp-a .bar{grid-column:1/-1;height:5px;border-radius:3px;background:var(--surface-2);overflow:hidden;margin-top:3px}
 .xp-a .bar span{display:block;height:100%;background:var(--inv)}
 .pos{color:var(--in)} .neg{color:var(--out)}
+
+/* Radar B3 */
+.radar{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin-top:14px}
+.rd{border:1px solid var(--line);border-radius:10px;padding:14px;display:grid;gap:10px;align-content:start;min-width:0}
+.rd-top{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.rd-top b{font-family:var(--f-mono);font-size:1.05rem}
+.rd-top small{display:block;color:var(--muted);font-size:.78rem;overflow-wrap:anywhere}
+.rd-px{text-align:right;font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.rd-px span{display:block;font-size:.8rem}
+.rd svg{width:100%;height:46px;display:block}
+.rd-mine{font-size:.8rem;background:var(--surface-2);border-radius:8px;padding:6px 10px}
+.rd dl{display:grid;gap:5px;margin:0;font-size:.82rem}
+.rd dl>div{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+.rd dt{color:var(--muted)}
+.rd dd{margin:0;text-align:right;white-space:nowrap;font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.rd .sep{border-top:1px solid var(--line);margin:2px 0}
+.rd .warn{color:var(--warn)}
+
+/* Botões que só existem com o servidor local (scripts/servidor.py) */
+body:not(.local) .so-local{display:none!important}
+.btn{font:inherit;font-size:.8rem;padding:5px 12px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer;white-space:nowrap}
+.btn:hover{border-color:var(--accent)}
+.btn.pri{background:var(--accent);color:var(--on-accent);border-color:transparent}
+.btn:disabled{opacity:.55;cursor:progress}
+.rd-acts{display:flex;flex-wrap:wrap;gap:6px}
+.radar-add{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.radar-add input{font:inherit;font-size:.85rem;width:120px;padding:5px 10px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--ink);text-transform:uppercase}
+.radar-msg{font-size:.82rem;color:var(--muted);min-height:1.2em;margin-top:8px}
+.radar-msg.err{color:var(--out)}
+.rel-list{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+dialog.rel{width:min(860px,calc(100vw - 32px));max-height:86vh;padding:0;border:1px solid var(--line);border-radius:var(--r);background:var(--surface);color:var(--ink)}
+dialog.rel::backdrop{background:rgb(0 0 0 / .45)}
+.rel-head{position:sticky;top:0;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 18px;background:var(--surface);border-bottom:1px solid var(--line)}
+.md{padding:6px 22px 22px;font-size:.92rem;line-height:1.55}
+.md h1{font-size:1.3rem}.md h2{font-size:1.08rem;margin-top:1.4em}.md h3{font-size:.98rem}
+.md table{border-collapse:collapse;width:100%;font-size:.84rem;margin:.6em 0;display:block;overflow-x:auto}
+.md th,.md td{border-bottom:1px solid var(--line);padding:5px 8px;text-align:left}
+.md th{color:var(--muted);font-weight:600}
+.md blockquote{margin:.8em 0;padding:4px 12px;border-left:3px solid var(--line);color:var(--muted)}
+.md a{color:var(--accent)}
+.md code{font-family:var(--f-mono);font-size:.85em}
 .top-list{display:grid;gap:10px}
 .top-list button{all:unset;cursor:pointer;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:3px 10px;font-size:.86rem;border-radius:8px;padding:4px 6px;margin:-4px -6px}
 .top-list button:hover{background:var(--surface-2)}
@@ -197,17 +241,22 @@ td.v.tr{color:var(--muted)}
 .src{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
 .src .step b.ok{color:var(--in)} .src .step b.pend{color:var(--warn)}
 .seg button:disabled{opacity:.4;cursor:not-allowed}
+[hidden]{display:none!important}
+.seg.tabs button{padding:7px 16px;font-size:.88rem}
 </style>
+</head>
+<body>
 
 <header class="top">
   <div class="wrap">
     <div>
-      <div class="eyebrow">Projeto pessoal · Inter</div>
+      <div class="eyebrow">Projeto pessoal · Inter e XP</div>
       <h1>Livro-Caixa Pessoal</h1>
       <p>Seu extrato do Inter desde a abertura da conta. Clique numa barra para abrir o mês, numa categoria para filtrar, num dia do calendário ou num destino para ver as transações.</p>
     </div>
     <div class="top-right">
       <span class="synced" id="synced" hidden></span>
+      <button class="btn so-local" type="button" id="sync-btn">Sincronizar agora</button>
       <span class="sample" id="src-badge"><i style="background:var(--in)"></i>Dados reais · só no seu computador</span>
       <div class="theme" id="theme" role="group" aria-label="Tema">
         <button type="button" data-t="light">Claro</button>
@@ -219,23 +268,19 @@ td.v.tr{color:var(--muted)}
 
 <nav class="filters" aria-label="Filtros">
   <div class="wrap">
+    <div class="seg tabs" id="f-tab" role="tablist" aria-label="Seções do painel">
+      <button type="button" role="tab" data-v="geral">Visão geral</button>
+      <button type="button" role="tab" data-v="inv">Investimentos</button>
+    </div>
     <div class="fgroup">
       <label for="f-year">Ano</label>
       <select id="f-year"></select>
     </div>
-    <div class="fgroup months-group">
-      <label>Mês</label>
-      <div class="months" id="f-months"></div>
+    <div class="fgroup so-geral">
+      <label for="f-month">Mês</label>
+      <select id="f-month"></select>
     </div>
-    <div class="fgroup">
-      <label>Conta</label>
-      <div class="seg" id="f-acc">
-        <button type="button" data-v="all">Todas</button>
-        <button type="button" data-v="Inter">Inter</button>
-        <button type="button" data-v="XP" disabled title="A XP ainda não foi conectada">XP</button>
-      </div>
-    </div>
-    <div class="fgroup">
+    <div class="fgroup so-geral">
       <label for="f-cat">Categoria</label>
       <select id="f-cat"></select>
     </div>
@@ -243,6 +288,7 @@ td.v.tr{color:var(--muted)}
 </nav>
 
 <main class="wrap">
+<div id="tab-geral" role="tabpanel">
   <section class="kpis" id="kpis" aria-label="Resumo do período"></section>
 
   <div class="grid2">
@@ -310,7 +356,13 @@ td.v.tr{color:var(--muted)}
     </section>
   </div>
 
-  <div class="grid2">
+  <section class="panel">
+    <div class="panel-head"><h2>Maiores destinos</h2><span class="hint">Clique para ver no extrato</span></div>
+    <div class="top-list" id="top"></div>
+  </section>
+</div>
+
+<div id="tab-inv" role="tabpanel" hidden>
     <section class="panel">
       <div class="panel-head">
         <h2 id="t-inv">Quanto você investiu por mês</h2>
@@ -323,11 +375,6 @@ td.v.tr{color:var(--muted)}
       <div class="chart"><canvas id="c-flux" aria-label="Aplicações no Inter, envios para a XP e resgates por mês"></canvas></div>
       <p class="note" id="flux-note"></p>
     </section>
-    <section class="panel">
-      <div class="panel-head"><h2>Maiores destinos</h2><span class="hint">Clique para ver no extrato</span></div>
-      <div class="top-list" id="top"></div>
-    </section>
-  </div>
 
   <section class="panel" id="inv-sec">
     <div class="panel-head">
@@ -387,10 +434,47 @@ td.v.tr{color:var(--muted)}
       <div class="xp-col">
         <div class="panel-head sub-head"><h3>Carteira atual</h3><span class="hint" id="xp-total"></span></div>
         <div class="xp-pos" id="xp-pos"></div>
+        <div id="bench-box" hidden>
+          <div class="panel-head sub-head" style="margin-top:18px"><h3>Acumulado desde a abertura</h3>
+            <div class="legend">
+              <span><i style="background:var(--inv);height:3px"></i>XP</span>
+              <span><i style="background:var(--accent);height:3px"></i>CDI</span>
+              <span><i style="background:var(--warn);height:3px"></i>IPCA</span>
+            </div>
+          </div>
+          <div class="chart" style="height:200px"><canvas id="c-bench" aria-label="Rentabilidade acumulada da XP comparada ao CDI e ao IPCA"></canvas></div>
+          <p class="note" id="bench-note" style="margin-top:6px"></p>
+        </div>
       </div>
     </div>
     <p class="note" id="inv-note"></p>
   </section>
+
+  <section class="panel" id="radar-sec" hidden>
+    <div class="panel-head">
+      <h2>Radar B3</h2>
+      <span class="hint" id="radar-ref"></span>
+    </div>
+    <form class="radar-add so-local" id="radar-add" autocomplete="off">
+      <input id="radar-tk" placeholder="Ex.: WEGE3" maxlength="6" aria-label="Código da ação na B3">
+      <button class="btn pri" type="submit" data-acao="adicionar">Adicionar ação</button>
+      <button class="btn" type="button" data-acao="analisar-input">Analisar</button>
+    </form>
+    <div class="radar-msg so-local" id="radar-msg" role="status"></div>
+    <p class="radar-msg" id="radar-dica" hidden>Para usar os botões de adicionar e analisar ações, deixe rodando no terminal <code>python3 scripts/servidor.py</code> e recarregue a página.</p>
+    <div class="xp-stats" id="radar-stats" style="margin-top:10px"></div>
+    <div class="radar" id="radar"></div>
+    <div class="so-local" id="rel-box" hidden>
+      <div class="panel-head sub-head" style="margin:18px 0 0"><h3>Relatórios de análise</h3><span class="hint">Pesquisa gerada pela skill /analisar-acao · não é recomendação</span></div>
+      <div class="rel-list" id="rel-list"></div>
+    </div>
+    <p class="note" id="radar-note"></p>
+  </section>
+</div>
+  <dialog class="rel" id="rel-dlg" aria-labelledby="rel-title">
+    <div class="rel-head"><b id="rel-title"></b><button class="btn" type="button" id="rel-close">Fechar</button></div>
+    <div class="md" id="rel-body"></div>
+  </dialog>
 
   <section class="panel">
     <div class="panel-head"><h2>Fontes de dados</h2><span class="hint">Tudo fica nesta pasta, no seu computador</span></div>
@@ -421,6 +505,8 @@ const RAW=/*__DADOS__*/[];
 const XP=/*__XP__*/null;
 const INV=/*__INTERINV__*/null;
 const SYNC=/*__SYNC__*/null;
+const IND=/*__INDICES__*/null;
+const RADAR=/*__RADAR__*/null;
 const MES=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 const MES_L=['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
 const DOW=['domingo','segunda','terça','quarta','quinta','sexta','sábado'];
@@ -476,13 +562,24 @@ const $=id=>document.getElementById(id);
 $('f-year').innerHTML=YEARS.map(y=>`<option value="${y}">${y}</option>`).join('');
 function drawFilters(){
   const has=monthsOf[S.year];
-  $('f-months').innerHTML=['all',...MES.keys()].map(m=>`<button type="button" class="chip" data-m="${m}" aria-pressed="${S.month===m}" ${m!=='all'&&!has.has(m)?'disabled':''}>${m==='all'?'Ano todo':MES[m]}</button>`).join('');
-  $('f-acc').querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.v===S.acc));
+  $('f-month').innerHTML=['all',...MES.keys()].map(m=>`<option value="${m}" ${S.month===m?'selected':''} ${m!=='all'&&!has.has(m)?'disabled':''}>${m==='all'?'Ano todo':MES_L[m][0].toUpperCase()+MES_L[m].slice(1)}</option>`).join('');
+  $('f-tab').querySelectorAll('button').forEach(b=>{b.setAttribute('aria-pressed',b.dataset.v===ABA);b.setAttribute('aria-selected',b.dataset.v===ABA)});
   $('f-cat').innerHTML='<option value="all">Todas</option>'+cats.map(c=>`<option ${c===S.cat?'selected':''}>${esc(c)}</option>`).join('');
   $('f-year').value=S.year;
 }
-$('f-months').addEventListener('click',e=>{const b=e.target.closest('button');if(!b||b.disabled)return;S.month=b.dataset.m==='all'?'all':+b.dataset.m;S.day=null;S.limit=15;render()});
-$('f-acc').addEventListener('click',e=>{const b=e.target.closest('button');if(!b||b.disabled)return;S.acc=b.dataset.v;render()});
+$('f-month').addEventListener('change',e=>{S.month=e.target.value==='all'?'all':+e.target.value;S.day=null;S.limit=15;render()});
+// abas: Visão geral (gastos) e Investimentos; lembradas no endereço (#investimentos) e no navegador
+let ABA=location.hash==='#investimentos'?'inv':location.hash==='#geral'?'geral':(()=>{try{return localStorage.getItem('lc-aba')||'geral'}catch(e){return 'geral'}})();
+function mostrarAba(){
+  $('tab-geral').hidden=ABA!=='geral';$('tab-inv').hidden=ABA!=='inv';
+  document.querySelectorAll('.so-geral').forEach(el=>el.hidden=ABA!=='geral');
+  $('f-tab').querySelectorAll('button').forEach(b=>{b.setAttribute('aria-pressed',b.dataset.v===ABA);b.setAttribute('aria-selected',b.dataset.v===ABA)});
+}
+$('f-tab').addEventListener('click',e=>{const b=e.target.closest('button');if(!b||b.dataset.v===ABA)return;ABA=b.dataset.v;
+  try{localStorage.setItem('lc-aba',ABA)}catch(e){}
+  history.replaceState(null,'',ABA==='inv'?'#investimentos':'#geral');
+  mostrarAba();drawCharts();scrollTo({top:0})});  // gráficos recriados já visíveis, com a largura certa
+mostrarAba();
 $('f-cat').addEventListener('change',e=>{S.cat=e.target.value;S.limit=15;render()});
 $('f-year').addEventListener('change',e=>{S.year=+e.target.value;S.month='all';S.day=null;S.limit=15;render()});
 $('f-q').addEventListener('input',e=>{S.q=e.target.value.trim().toLowerCase();S.limit=15;drawTable()});
@@ -583,6 +680,22 @@ function drawCharts(){
     ]},options:o4});
     o5.plugins.tooltip.callbacks.label=c=>{const r=xm[c.dataIndex];return ` ${sgn(r.rendimento)} · ${pctN(r.rent_pct)} · ${pctN(r.pct_cdi,0)} do CDI`};
     charts.r=new Chart($('c-rend'),{type:'bar',data:{labels:xm.map(r=>mesAno(r.data)),datasets:[{data:xm.map(r=>r.rendimento),backgroundColor:xm.map(r=>r.rendimento>=0?cin:cout),borderRadius:2,maxBarThickness:14}]},options:o5});
+    // XP × CDI × IPCA, acumulado mês a mês (IPCA para no último mês divulgado)
+    if(IND&&xm.every(r=>r.cdi_pct!=null)){
+      const acc=k=>{let f=1,ok=true;return xm.map(r=>{if(r[k]==null)ok=false;if(!ok)return null;f*=1+r[k]/100;return +((f-1)*100).toFixed(2)})};
+      const sx=acc('rent_pct'),sc=acc('cdi_pct'),si=acc('ipca_pct'),o7=baseOpts();
+      o7.scales.x.ticks={maxRotation:0,autoSkip:true,maxTicksLimit:6};o7.scales.y.ticks={callback:v=>v+'%'};
+      o7.plugins.tooltip.mode='index';o7.plugins.tooltip.intersect=false;
+      o7.plugins.tooltip.callbacks.label=c=>c.parsed.y==null?null:` ${c.dataset.label}: ${pctN(c.parsed.y)}`;
+      const ln=(label,data,color,w)=>({label,data,borderColor:color,backgroundColor:color,borderWidth:w,pointRadius:0,tension:.25,spanGaps:false});
+      $('bench-box').hidden=false;  // visível antes de criar o gráfico, senão ele nasce com largura 0
+      charts.b=new Chart($('c-bench'),{type:'line',data:{labels:xm.map(r=>mesAno(r.data)),datasets:[
+        ln('XP',sx,cinv,2.5),ln('CDI',sc,cacc,1.5),ln('IPCA',si,cwarn,1.5)]},options:o7});
+      const iu=si.findLastIndex(v=>v!=null),real=iu<0?null:((1+sx[iu]/100)/(1+si[iu]/100)-1)*100;
+      $('bench-note').innerHTML=`Desde a abertura: XP ${pctN(sx.at(-1))}, CDI ${pctN(sc.at(-1))}`+
+        (iu<0?'.':`, IPCA ${pctN(si[iu])} até ${mesAno(xm[iu].data)}. Acima da inflação até lá: <b class="${cl(real)}">${pctN(real)}</b>.`)+
+        ' CDI e IPCA da API do Banco Central.';
+    }
   }
 }
 
@@ -758,8 +871,150 @@ function drawInv(){
   $('xp-pos').innerHTML=Object.entries(grupos).map(([c,ps])=>{const v=ps.reduce((x,p)=>x+p.valor,0);
     return `<div class="xp-cls"><header><span>${c}</span><span class="num">${fmt(v)} · ${pct(v/tot)}</span></header>`+ps.map(p=>{const r=p.aplicado==null?null:p.valor-p.aplicado;
       return `<div class="xp-a"><span class="nm">${esc(p.ativo)}</span><span class="num">${fmt(p.valor)}</span><span class="in2">${esc(p.sub)} · ${esc(p.info)}</span><span class="rs num ${r==null?'':cl(r)}">${r==null?'preço médio não informado':`${sgn(r)} (${pctN(r/p.aplicado*100)})`}</span><span class="bar"><span style="width:${p.valor/tot*100}%"></span></span></div>`}).join('')+'</div>'}).join('');
-  $('inv-note').textContent='Os valores da XP vêm do portal deles: patrimônio a mercado, rendimento já descontado de taxas e % do CDI calculado pela XP. Os Pix do Inter para o seu nome só contam como envio para a XP quando aparecem no extrato de lá; os outros ficam como "Entre suas contas".';
+  $('inv-note').textContent='Os valores da XP vêm do portal deles: patrimônio a mercado, rendimento já descontado de taxas e % do CDI calculado pela XP até 28/10/2026; nos meses seguintes, o % do CDI é calculado aqui com o CDI do Banco Central. Os Pix do Inter para o seu nome só contam como envio para a XP quando aparecem no extrato de lá; os outros ficam como "Entre suas contas".';
   $('src-xp').textContent=`Posição e lançamentos de ${dmY(XP.atualizado_em)} · ${xm.length} meses de evolução · rentabilidade e % do CDI do portal XP em ${dmY(XP.performance_em||XP.atualizado_em)}.`;
+}
+
+/* ---------- Radar B3 ---------- */
+// linha da ação e do Ibovespa no mesmo ano, as duas partindo de 100
+function spark(s,ib){
+  const W=300,H=46,norm=a=>a.map(p=>p[1]/a[0][1]*100),a=norm(s),b=norm(ib),all=[...a,...b],lo=Math.min(...all),hi=Math.max(...all);
+  const pts=v=>v.map((y,i)=>`${(i/(v.length-1)*W).toFixed(1)},${(H-2-(y-lo)/(hi-lo||1)*(H-4)).toFixed(1)}`).join(' ');
+  const c=a.at(-1)>=100?'var(--in)':'var(--out)';
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true"><polyline points="${pts(b)}" fill="none" stroke="var(--muted)" stroke-width="1" stroke-dasharray="3 3" vector-effect="non-scaling-stroke"/><polyline points="${pts(a)}" fill="none" stroke="${c}" stroke-width="1.8" vector-effect="non-scaling-stroke"/><\/svg>`;  // <\/ evita que o Live Server injete o script dele aqui dentro
+}
+function drawRadar(){
+  if(!RADAR||!RADAR.acoes.length)return;
+  $('radar-sec').hidden=false;
+  const I=RADAR.ibovespa,pp=v=>v==null?'—':`<span class="${cl(v)}">${v>=0?'+':''}${pctN(v,1)}</span>`,x=(v,d=1)=>v==null?'—':v.toLocaleString('pt-BR',{maximumFractionDigits:d,minimumFractionDigits:d});
+  const mine=RADAR.acoes.filter(a=>a.carteira),val=mine.reduce((s,a)=>s+a.carteira.quantidade*a.preco,0),
+    apl=mine.reduce((s,a)=>s+(a.carteira.aplicado??0),0),prov=mine.reduce((s,a)=>s+a.carteira.proventos,0);
+  $('radar-ref').textContent=`Cotações de ${dmY(I.data)} · não é recomendação de compra ou venda`;
+  $('radar-stats').innerHTML=[
+    ['Ibovespa',I.pontos.toLocaleString('pt-BR')+' pts',`${pp(I.ret_12m)} em 12 meses · ${pp(I.ret_1m)} no último mês`],
+    ['CDI em 12 meses',RADAR.cdi_12m==null?'—':pctN(RADAR.cdi_12m),'O que a renda fixa pós-fixada rendeu no mesmo período'],
+    ...(mine.length?[['Suas ações hoje',fmt(val),`${mine.length} ações · ${sgn(val-apl)} sobre o preço médio · ${fmt(prov)} em proventos`]]:[])
+  ].map(([l,v,s])=>`<div class="st"><span class="eyebrow">${l}</span><b>${v}</b><span>${s}</span></div>`).join('');
+  const ordem=[...RADAR.acoes].sort((a,b)=>(!!b.carteira-!!a.carteira)||a.ticker.localeCompare(b.ticker));
+  $('radar').innerHTML=ordem.map(a=>{
+    const f=a.fundamentos,banco=f&&f.banco,dist=a.max_52s?(a.preco/a.max_52s-1)*100:null,c=a.carteira;
+    const res=c&&c.aplicado!=null?c.quantidade*a.preco-c.aplicado:null;
+    const fund=f?[['P/L',x(f.pl)],['P/VP',x(f.pvp,2)],['ROE',f.roe==null?'—':pctN(f.roe,1)],['Margem líquida',banco?'n/a (banco)':f.margem_liquida==null?'—':pctN(f.margem_liquida,1)],
+        ['Dív. líquida / patrimônio',banco?'n/a (banco)':f.divida_liq_pl==null?'—':x(f.divida_liq_pl,2)+'x'],['Receita em 5 anos',f.crescimento_receita_5a==null?'—':pp(f.crescimento_receita_5a)]]
+      :[['P/L, P/VP, ROE','indisponíveis']];
+    return `<article class="rd">
+      <div class="rd-top"><div><b>${esc(a.ticker)}</b><small>${esc(a.nome)}${f&&f.subsetor?' · '+esc(f.subsetor):''}</small></div>
+        <div class="rd-px">${fmt(a.preco)}<span>${pp(a.ret_12m)} em 12m</span></div></div>
+      ${spark(a.serie,I.serie)}
+      ${c?`<div class="rd-mine">Na sua carteira: ${c.quantidade} ${c.quantidade==1?'ação':'ações'}${c.aplicado!=null?` · preço médio ${fmt(c.aplicado/c.quantidade)} · <span class="${cl(res)}">${sgn(res)}</span>`:''}${c.proventos?` · ${fmt(c.proventos)} em proventos`:''}</div>`:''}
+      <dl>
+        ${[['1 mês · 3 meses',`${pp(a.ret_1m)} · ${pp(a.ret_3m)}`],['12m contra o Ibovespa',`${pp(a.ret_12m-I.ret_12m)} p.p.`],
+          ['Da máxima do ano',pp(dist)],['Dividend yield 12m',a.dy_12m==null?'—':`<span class="${a.dy_12m>20?'warn':''}">${pctN(a.dy_12m,1)}</span>`],
+          ['Volatilidade anual',pctN(a.volatilidade,0)],['Maior queda no ano',`<span class="neg">${pctN(a.maior_queda,0)}</span>`]].map(([k,v])=>`<div><dt>${k}</dt><dd>${v}</dd></div>`).join('')}
+        <div class="sep"></div>
+        ${fund.map(([k,v])=>`<div><dt>${k}</dt><dd>${v}</dd></div>`).join('')}
+      </dl>
+      ${a.dy_12m>20?'<small class="warn">Dividend yield muito alto: provável provento extraordinário, que não deve se repetir.</small>':''}
+      <div class="rd-acts so-local">
+        <button class="btn" type="button" data-acao="analisar" data-t="${esc(a.ticker)}">Analisar</button>
+        <button class="btn" type="button" data-acao="ver" data-t="${esc(a.ticker)}" hidden>Último relatório</button>
+        ${c?'':`<button class="btn" type="button" data-acao="remover" data-t="${esc(a.ticker)}">Remover</button>`}
+      </div>
+    </article>`}).join('');
+  const semTok=RADAR.acoes.filter(a=>!a.fundamentos).map(a=>a.ticker);
+  $('radar-note').innerHTML=`A linha tracejada é o Ibovespa no mesmo período. Volatilidade e maior queda medem o quanto a ação oscilou no último ano; P/L e P/VP comparam o preço com o lucro e com o patrimônio da empresa (P/L negativo = prejuízo); ROE é o lucro sobre o patrimônio; dívida líquida negativa = mais caixa que dívida. `+
+    `Para acompanhar outra ação: <code>python3 scripts/radar_b3.py --adicionar WEGE3</code>.`+
+    (semTok.length?` Sem fundamentos agora: ${semTok.join(', ')}.`:'')+
+    ` Fontes: Yahoo Finance (cotações e proventos), Fundamentus (indicadores, último balanço) e brapi.dev (setor e descrição).`;
+}
+
+/* ---------- Botões locais (só com scripts/servidor.py rodando) ---------- */
+// Markdown dos relatórios → HTML. Escapa tudo antes; só gera as poucas tags abaixo.
+function md(txt){
+  const inl=s=>esc(s).replace(/`([^`]+)`/g,'<code>$1</code>').replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>').replace(/(^|[^*])\*([^*\s][^*]*)\*/g,'$1<i>$2</i>')
+    .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g,'<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+  const cells=l=>l.trim().replace(/^\||\|$/g,'').split('|').map(c=>c.trim());
+  const L=txt.split('\n'),out=[];let i=0;
+  while(i<L.length){
+    const l=L[i];
+    if(/^\s*\|/.test(l)&&/^\s*\|?[\s:|-]+\|?\s*$/.test(L[i+1]||'')){
+      const h=cells(l);i+=2;const rows=[];while(i<L.length&&/^\s*\|/.test(L[i]))rows.push(cells(L[i++]));
+      out.push(`<table><thead><tr>${h.map(c=>`<th>${inl(c)}</th>`).join('')}</tr></thead><tbody>${rows.map(r=>`<tr>${r.map(c=>`<td>${inl(c)}</td>`).join('')}</tr>`).join('')}</tbody></table>`);continue}
+    let m;
+    if((m=l.match(/^(#{1,4})\s+(.*)/))){out.push(`<h${m[1].length}>${inl(m[2])}</h${m[1].length}>`);i++;continue}
+    if(/^\s*(-{3,}|\*{3,})\s*$/.test(l)){out.push('<hr>');i++;continue}
+    if(/^\s*([-*]|\d+\.)\s+/.test(l)){const ol=/^\s*\d+\./.test(l),it=[];
+      while(i<L.length&&/^\s*([-*]|\d+\.)\s+/.test(L[i]))it.push(L[i++].replace(/^\s*([-*]|\d+\.)\s+/,''));
+      out.push(`<${ol?'ol':'ul'}>${it.map(x=>`<li>${inl(x)}</li>`).join('')}</${ol?'ol':'ul'}>`);continue}
+    if(/^>\s?/.test(l)){const q=[];while(i<L.length&&/^>\s?/.test(L[i]))q.push(L[i++].replace(/^>\s?/,''));out.push(`<blockquote>${inl(q.join(' '))}</blockquote>`);continue}
+    if(!l.trim()){i++;continue}
+    const p=[];while(i<L.length&&L[i].trim()&&!/^(#{1,4}\s|\s*\||\s*([-*]|\d+\.)\s|>)/.test(L[i]))p.push(L[i++]);
+    if(!p.length)p.push(L[i++]);
+    out.push(`<p>${inl(p.join(' '))}</p>`);
+  }
+  return out.join('');
+}
+let ST={tarefas:{},relatorios:[]},pollT=null,vistos=new Set(),API='';  // API: endereço do scripts/servidor.py
+async function api(path,body){
+  const r=await fetch(API+path,body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{cache:'no-store'});
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok&&r.status!==202)throw new Error(j.erro||'Erro '+r.status);
+  return j;
+}
+const rmsg=(t,err)=>{$('radar-msg').textContent=t;$('radar-msg').classList.toggle('err',!!err)};
+async function abrirRel(nome){
+  try{const r=await api('/api/relatorio?nome='+encodeURIComponent(nome));
+    $('rel-title').textContent=nome.replace(/^ANALISE-|\.md$/g,'').replace(/-(\d{4})-(\d\d)-(\d\d)$/,' · $3/$2/$1');
+    $('rel-body').innerHTML=md(r.texto);$('rel-dlg').showModal();$('rel-body').scrollTop=0}
+  catch(e){rmsg(e.message,true)}
+}
+function drawLocal(){
+  const T=ST.tarefas,rodando=Object.entries(T).filter(([,v])=>v.estado==='rodando').map(([k])=>k);
+  document.querySelectorAll('[data-acao="analisar"]').forEach(b=>{const on=T['analise:'+b.dataset.t]?.estado==='rodando';b.disabled=on;b.textContent=on?'Analisando…':'Analisar'});
+  document.querySelectorAll('[data-acao="ver"]').forEach(b=>b.hidden=!ST.relatorios.some(r=>r.ticker===b.dataset.t));
+  $('sync-btn').disabled=T.sincronizar?.estado==='rodando';$('sync-btn').textContent=$('sync-btn').disabled?'Sincronizando…':'Sincronizar agora';
+  $('rel-box').hidden=!ST.relatorios.length;
+  $('rel-list').innerHTML=ST.relatorios.map(r=>`<button class="btn" type="button" data-rel="${esc(r.nome)}">${esc(r.ticker)} · ${dmY(r.data)}</button>`).join('');
+  const an=rodando.filter(k=>k.startsWith('analise:')).map(k=>k.slice(8));
+  if(an.length)rmsg(`Analisando ${an.join(', ')} com o Claude Code… costuma levar de 3 a 8 minutos. Pode continuar usando o painel.`);
+}
+async function poll(){
+  try{
+    const ant=ST.tarefas;ST=await api('/api/status');
+    for(const[k,v]of Object.entries(ST.tarefas)){
+      if(ant[k]?.estado!=='rodando'||v.estado==='rodando'||vistos.has(k+v.fim))continue;
+      vistos.add(k+v.fim);
+      if(k==='sincronizar'){if(v.estado==='pronto'){location.reload();return}rmsg('A sincronização falhou: '+v.mensagem,true)}
+      else if(v.estado==='pronto'){rmsg(`Análise de ${k.slice(8)} pronta.`);abrirRel(v.mensagem)}
+      else rmsg(`A análise de ${k.slice(8)} falhou: ${v.mensagem}`,true);
+    }
+    drawLocal();
+  }catch(e){}
+  clearTimeout(pollT);
+  if(Object.values(ST.tarefas).some(v=>v.estado==='rodando'))pollT=setTimeout(poll,4000);
+}
+async function initLocal(){
+  // servido pelo scripts/servidor.py: API no mesmo endereço. Live Server (ou outra página local): procura o servidor na 8765.
+  if(!window.SERVIDOR_LOCAL){
+    if(!/^(127\.0\.0\.1|localhost)$/.test(location.hostname))return;  // como arquivo ou no Claude: sem botões
+    API='http://127.0.0.1:8765';
+  }
+  try{ST=await api('/api/status')}
+  catch(e){$('radar-dica').hidden=false;return}  // servidor desligado: só a dica de como ligar
+  Object.entries(ST.tarefas).forEach(([k,v])=>vistos.add(k+v.fim));
+  document.body.classList.add('local');drawLocal();poll();
+  const analisar=async t=>{try{await api('/api/analisar',{ticker:t});rmsg(`Análise de ${t} iniciada.`);poll()}catch(e){rmsg(e.message,true)}};
+  $('radar-add').addEventListener('submit',async e=>{e.preventDefault();const t=$('radar-tk').value.trim().toUpperCase();if(!t)return;
+    const b=e.submitter||$('radar-add').querySelector('[data-acao="adicionar"]');b.disabled=true;rmsg(`Buscando ${t}…`);
+    try{await api('/api/radar/adicionar',{ticker:t});location.reload()}catch(err){rmsg(err.message,true);b.disabled=false}});
+  $('radar-add').querySelector('[data-acao="analisar-input"]').addEventListener('click',()=>{const t=$('radar-tk').value.trim().toUpperCase();if(t)analisar(t);else rmsg('Digite o código da ação, como WEGE3.',true)});
+  $('radar').addEventListener('click',async e=>{const b=e.target.closest('button[data-acao]');if(!b)return;const t=b.dataset.t;
+    if(b.dataset.acao==='analisar')analisar(t);
+    if(b.dataset.acao==='ver'){const r=ST.relatorios.find(r=>r.ticker===t);if(r)abrirRel(r.nome)}
+    if(b.dataset.acao==='remover'&&confirm(`Parar de acompanhar ${t} no radar?`)){b.disabled=true;try{await api('/api/radar/remover',{ticker:t});location.reload()}catch(err){rmsg(err.message,true);b.disabled=false}}});
+  $('rel-list').addEventListener('click',e=>{const b=e.target.closest('[data-rel]');if(b)abrirRel(b.dataset.rel)});
+  $('rel-close').addEventListener('click',()=>$('rel-dlg').close());
+  $('sync-btn').addEventListener('click',async()=>{try{await api('/api/sincronizar',{});poll()}catch(e){rmsg(e.message,true)}});
 }
 
 const invTotal=()=>(INV?INV.total:0)+(XP?XP.patrimonio:0);
@@ -775,7 +1030,8 @@ function drawInter(){
     ['Total investido hoje',fmt(invTotal()),'Inter + XP, a valor de mercado'],
     ['No Inter',INV?fmt(INV.total):'—',INV?pct(INV.total/invTotal())+' do total':'Posição não importada'],
     ['Na XP',XP?fmt(XP.patrimonio):'—',XP?pct(XP.patrimonio/invTotal())+' do total':'XP não importada'],
-    ['Rendimento em 12 meses',`<span class="${cl(r12)}">${sgn(r12)}</span>`,`Inter ${sgn(rend12Inter())} · XP ${XP?sgn(XP.performance.doze_meses.rendimento):'—'}`]
+    ['Rendimento em 12 meses',`<span class="${cl(r12)}">${sgn(r12)}</span>`,`Inter ${sgn(rend12Inter())} · XP ${XP?sgn(XP.performance.doze_meses.rendimento):'—'}`],
+    ...(IND?[['CDI e IPCA em 12 meses',`${pctN(IND.cdi_12m)} · ${pctN(IND.ipca_12m)}`,`Referência do Banco Central · CDI até ${dmY(IND.cdi_ate)}, IPCA até ${mesAno(IND.ipca_ate+'-01')}`]]:[])
   ].map(([l,v,s])=>`<div class="st"><span class="eyebrow">${l}</span><b>${v}</b><span>${s}</span></div>`).join('');
   $('inv-ref').textContent=INV?`Posição de ${dmY(INV.atualizado_em)}`:'';
   if(!INV){$('inter-stats').innerHTML='';$('inter-pos').innerHTML='<p class="empty-msg">Posição do Inter ainda não importada.</p>';return}
@@ -809,5 +1065,9 @@ if(SYNC){const d=new Date(SYNC);$('synced').hidden=false;
 
 function render(){drawFilters();drawKpis();drawCharts();drawInsights();drawCal();drawTable();drawTop();drawInv()}
 render();
+drawRadar();
+initLocal();
 })();
 </script>
+</body>
+</html>

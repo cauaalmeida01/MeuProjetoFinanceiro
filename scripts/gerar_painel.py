@@ -12,6 +12,7 @@ import csv
 import json
 import re
 from collections import Counter, defaultdict
+from datetime import date, timedelta
 from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parent.parent
@@ -21,6 +22,8 @@ REGRAS_PESSOAIS = RAIZ / "dados" / "regras_pessoais.json"
 XP = RAIZ / "dados" / "xp.json"
 INTER_INV = RAIZ / "dados" / "inter_invest.json"
 PLUGGY = RAIZ / "dados" / "pluggy_investimentos.json"
+INDICES = RAIZ / "dados" / "indices.json"
+RADAR = RAIZ / "dados" / "radar_b3.json"
 BASE = RAIZ / "painel" / "base.html"
 SAIDA_JSON = RAIZ / "dados" / "transacoes.json"
 SAIDA_HTML = RAIZ / "painel" / "index.html"
@@ -113,6 +116,82 @@ def carregar_inter_inv(tx):
     return {k: v for k, v in inv.items() if not k.startswith("_")}
 
 
+def carregar_indices():
+    return json.loads(INDICES.read_text(encoding="utf-8")) if INDICES.exists() else None
+
+
+def acumulado(pcts):
+    """Rentabilidade composta, em %, de uma sequência de taxas em %."""
+    f = 1.0
+    for p in pcts:
+        f *= 1 + p / 100
+    return (f - 1) * 100
+
+
+def recalcular_xp(xp, ind):
+    """Recalcula, com o CDI e o IPCA do Banco Central, o % do CDI de cada mês, a performance e o resumo por ano.
+
+    Encadeando os meses do portal da XP, o resultado bate com o deles (116,0% do CDI desde a abertura),
+    então dá para estender o cálculo aos meses que a sincronização com a Pluggy acrescenta.
+    """
+    if not xp or not ind:
+        return xp
+    cdi = sorted(ind["cdi"].items())
+    ant = (date.fromisoformat(xp["abertura"]) - timedelta(days=1)).isoformat()
+    for r in xp["mensal"]:
+        desde = r.get("desde", ant)
+        r["cdi_pct"] = round(acumulado(v for d, v in cdi if desde < d <= r["data"]), 4)
+        r["ipca_pct"] = ind["ipca"].get(r["data"][:7])
+        if r.get("pct_cdi") is None and r["cdi_pct"]:
+            r["pct_cdi"] = round(r["rent_pct"] / r["cdi_pct"] * 100, 2)
+        ant = r["data"]
+    # enquanto só houver meses do portal, ficam os números oficiais da XP (diferem em décimos dos recalculados)
+    if not any(r.get("fonte") == "pluggy" for r in xp["mensal"]):
+        return xp
+
+    def resumo(linhas):
+        rent, c = acumulado(r["rent_pct"] for r in linhas), acumulado(r["cdi_pct"] for r in linhas)
+        return {"rendimento": round(sum(r["rendimento"] for r in linhas), 2), "rent_pct": round(rent, 2),
+                "pct_cdi": round(rent / c * 100, 2) if c else None,
+                "aportes_liquidos": round(sum(r["aportes_liquidos"] for r in linhas), 2)}
+
+    m = xp["mensal"]
+    xp["performance"] = {
+        "desde_inicio": resumo(m),
+        "doze_meses": resumo(m[-12:]),
+        "meses_positivos": sum(r["rendimento"] >= 0 for r in m),
+        "meses_negativos": sum(r["rendimento"] < 0 for r in m),
+        "meses_acima_cdi": sum(r["rent_pct"] >= r["cdi_pct"] for r in m),
+        "meses_abaixo_cdi": sum(r["rent_pct"] < r["cdi_pct"] for r in m),
+        "melhor_mes_pct": max(r["rent_pct"] for r in m),
+        "pior_mes_pct": min(r["rent_pct"] for r in m),
+    }
+    anos = defaultdict(list)
+    for r in m:
+        anos[int(r["data"][:4])].append(r)
+    xp["por_ano"] = [{"ano": a, **{k: v for k, v in resumo(ls).items()}, "final": ls[-1]["final"]}
+                     for a, ls in sorted(anos.items())]
+    xp["performance_em"] = m[-1]["data"]
+    return xp
+
+
+def resumo_indices(ind):
+    """CDI e IPCA mês a mês e dos últimos 12 meses, para o painel."""
+    if not ind:
+        return None
+    cdi_mes = defaultdict(list)
+    for d, v in ind["cdi"].items():
+        cdi_mes[d[:7]].append(v)
+    cdi_mensal = {m: round(acumulado(vs), 4) for m, vs in sorted(cdi_mes.items())}
+    ultimo_cdi = max(ind["cdi"])
+    um_ano = (date.fromisoformat(ultimo_cdi) - timedelta(days=365)).isoformat()
+    ipca = sorted(ind["ipca"].items())
+    return {"cdi_mensal": cdi_mensal, "ipca_mensal": dict(ipca),
+            "cdi_12m": round(acumulado(v for d, v in ind["cdi"].items() if d > um_ano), 2),
+            "ipca_12m": round(acumulado(v for _, v in ipca[-12:]), 2),
+            "cdi_ate": ultimo_cdi, "ipca_ate": ipca[-1][0]}
+
+
 def ultima_sincronizacao():
     """Data e hora da última sincronização com a Pluggy, gravada por sincronizar_pluggy.py."""
     if not PLUGGY.exists():
@@ -168,12 +247,16 @@ def main():
         tx.append([l["data"], desc, cat, tipo, round(abs(v), 2), l["titulo"], "Inter", prod])
 
     SAIDA_JSON.write_text(json.dumps(tx, ensure_ascii=False), encoding="utf-8")
-    xp_painel = {k: v for k, v in xp.items() if not k.startswith("_") and k not in ("envios_inter_para_xp", "retornos_xp_para_inter")} if xp else None
+    ind = carregar_indices()
+    xp_painel = {k: v for k, v in xp.items() if not k.startswith("_") and k not in ("envios_inter_para_xp", "retornos_xp_para_inter", "fotos_mensais")} if xp else None
+    xp_painel = recalcular_xp(xp_painel, ind)
     html = (BASE.read_text(encoding="utf-8")
             .replace("/*__DADOS__*/[]", json.dumps(tx, ensure_ascii=False))
             .replace("/*__XP__*/null", json.dumps(xp_painel, ensure_ascii=False))
             .replace("/*__INTERINV__*/null", json.dumps(carregar_inter_inv(tx), ensure_ascii=False))
-            .replace("/*__SYNC__*/null", json.dumps(ultima_sincronizacao())))
+            .replace("/*__SYNC__*/null", json.dumps(ultima_sincronizacao()))
+            .replace("/*__INDICES__*/null", json.dumps(resumo_indices(ind)))
+            .replace("/*__RADAR__*/null", RADAR.read_text(encoding="utf-8") if RADAR.exists() else "null"))
     SAIDA_HTML.write_text(html, encoding="utf-8")
 
     # resumo no terminal
