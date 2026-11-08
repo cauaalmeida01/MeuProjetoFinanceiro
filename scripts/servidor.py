@@ -184,7 +184,10 @@ def main():
     ap.add_argument("--sem-navegador", action="store_true")
     a = ap.parse_args()
     rodar(gerar_painel.main)
-    servidor = ThreadingHTTPServer(("127.0.0.1", a.porta), Painel)
+    try:
+        servidor = ThreadingHTTPServer(("127.0.0.1", a.porta), Painel)
+    except OSError:
+        sys.exit(f"A porta {a.porta} já está em uso: o painel provavelmente já está ligado (scripts/ligar_painel.sh).")
     url = f"http://127.0.0.1:{a.porta}"
     print(f"Painel em {url}  (Ctrl+C para parar)")
     if not a.sem_navegador:

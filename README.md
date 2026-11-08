@@ -12,6 +12,7 @@ scripts/sincronizar_pluggy.py busca o extrato na Pluggy e gera o painel
 scripts/indices_bcb.py       baixa CDI e IPCA do Banco Central
 scripts/radar_b3.py          Radar B3: cotações, proventos e fundamentos das suas ações
 scripts/servidor.py          abre o painel com os botões (adicionar ação, analisar, sincronizar)
+scripts/ligar_painel.sh      deixa o servidor sempre ligado no Mac e cria o app "Painel Financeiro"
 .claude/skills/analisar-acao skill /analisar-acao TICKER (relatório de pesquisa em português)
 scripts/agendar_sincronizacao.sh liga/desliga a sincronização diária no Mac
 painel/base.html            o painel (HTML + gráficos), sem dados
@@ -25,6 +26,20 @@ dados/                      NÃO vai para o GitHub
   transacoes.json           gerado
 painel/index.html           gerado, com seus dados (NÃO vai para o GitHub)
 ```
+
+## Painel sempre ligado no Mac
+
+```bash
+scripts/ligar_painel.sh            # liga uma vez; depois sobe sozinho ao entrar no Mac
+scripts/ligar_painel.sh remover    # desliga
+```
+
+O script transforma o `servidor.py` num serviço do macOS, como o agendamento das 13h:
+- ele fica rodando em segundo plano em `http://127.0.0.1:8765`, uma porta acessível só deste Mac;
+- se cair, volta sozinho;
+- o app **Painel Financeiro**, em `~/Applications`, abre o painel no navegador e pode ir para o Dock.
+
+Não precisa de VS Code nem de terminal aberto. O log fica em `dados/servidor.log`.
 
 ## Abrir o painel com os botões
 
@@ -63,11 +78,11 @@ Os Item IDs ficam em dashboard.pluggy.ai, em Demo, no menu ⋮ de cada conexão,
 
 ```bash
 python3 scripts/sincronizar_pluggy.py          # sincroniza agora
-scripts/agendar_sincronizacao.sh               # liga a sincronização diária (13h)
+scripts/agendar_sincronizacao.sh               # liga a sincronização (8h, 12h, 15h, 18h e 21h)
 scripts/agendar_sincronizacao.sh remover       # desliga
 ```
 
-O histórico antigo continua em `dados/inter_extrato.psv`; só o período que a Pluggy cobre é substituído. Da XP vêm as posições, o saldo, os proventos e os Pix recebidos do Inter (que entram na conciliação de `envios_inter_para_xp`), gravados em `dados/xp.json`. A cada mês o script guarda o patrimônio da XP em `fotos_mensais` e, a partir de novembro de 2026, calcula aportes e rendimento do mês; a rentabilidade acumulada e o % do CDI são recalculados com o CDI e o IPCA da API pública do Banco Central (`scripts/indices_bcb.py`, salvos em `dados/indices.json`). Encadeando os meses do portal da XP, esse cálculo dá 115,99% do CDI desde a abertura, contra 116,02% do portal. O log da execução diária fica em `dados/sincronizacao.log`. A autorização do Open Finance vence em até 12 meses e precisa ser renovada no Meu Pluggy.
+O histórico antigo continua em `dados/inter_extrato.psv`; só o período que a Pluggy cobre é substituído. Da XP vêm as posições, o saldo, os proventos e os Pix recebidos do Inter (que entram na conciliação de `envios_inter_para_xp`), gravados em `dados/xp.json`. A cada mês o script guarda o patrimônio da XP em `fotos_mensais` e, a partir de novembro de 2026, calcula aportes e rendimento do mês; a rentabilidade acumulada e o % do CDI são recalculados com o CDI e o IPCA da API pública do Banco Central (`scripts/indices_bcb.py`, salvos em `dados/indices.json`). Encadeando os meses do portal da XP, esse cálculo dá 115,99% do CDI desde a abertura, contra 116,02% do portal. O log, com a data e a hora de cada execução, fica em `dados/sincronizacao.log`. A Pluggy busca os bancos uma vez por dia, então uma compra de hoje normalmente aparece no painel no dia seguinte. A sincronização roda várias vezes ao dia para não perder essa atualização. Ela espera a internet voltar se o Mac acabou de acordar, tenta de novo quando a Pluggy demora e salva um banco mesmo se o outro falhar. A autorização do Open Finance vence em até 12 meses e precisa ser renovada no Meu Pluggy.
 
 ## Radar B3 e /analisar-acao
 

@@ -10,9 +10,12 @@ O Open Finance só devolve os últimos ~12 meses. O histórico antigo continua
 em dados/inter_extrato.psv; só o período que a Pluggy cobre é substituído.
 Saída: dados/inter_extrato.psv, dados/pluggy_investimentos.json e o painel.
 """
+import fcntl
 import json
 import re
+import socket
 import sys
+import time
 import urllib.error
 import urllib.request
 from datetime import date, datetime, timedelta, timezone
@@ -54,11 +57,20 @@ class Pluggy:
         req.add_header("Content-Type", "application/json")
         if self.chave:
             req.add_header("X-API-KEY", self.chave)
-        try:
-            with urllib.request.urlopen(req, timeout=60) as r:
-                return json.loads(r.read())
-        except urllib.error.HTTPError as e:
-            sys.exit(f"Pluggy respondeu {e.code} em {metodo} {caminho.split('?')[0]}: {e.read().decode()[:200]}")
+        for tentativa, espera in enumerate((5, 15, 30, None), 1):
+            try:
+                with urllib.request.urlopen(req, timeout=60) as r:
+                    return json.loads(r.read())
+            except urllib.error.HTTPError as e:
+                # 4xx é problema do pedido (chave, item): não adianta repetir; 5xx é instabilidade da Pluggy
+                if e.code < 500 or espera is None:
+                    raise RuntimeError(f"Pluggy respondeu {e.code} em {metodo} {caminho.split('?')[0]}: "
+                                       f"{e.read().decode()[:200]}") from None
+            except (urllib.error.URLError, TimeoutError, ConnectionError) as e:
+                if espera is None:
+                    raise RuntimeError(f"sem conexão com a Pluggy ({e})") from None
+            print(f"  Pluggy não respondeu (tentativa {tentativa}); tentando de novo em {espera}s")
+            time.sleep(espera)
 
     def transacoes(self, conta):
         """Todas as transações da conta, seguindo a paginação por cursor."""
@@ -68,6 +80,19 @@ class Pluggy:
             tudo += r["results"]
             caminho = "/v2/transactions" + r["next"] if r.get("next") else None
         return tudo
+
+
+def esperar_rede(limite=300):
+    """Espera a internet voltar (o Mac pode estar acordando com o Wi-Fi ainda desligado)."""
+    inicio = time.monotonic()
+    while True:
+        try:
+            socket.getaddrinfo("api.pluggy.ai", 443)
+            return
+        except OSError:
+            if time.monotonic() - inicio > limite:
+                raise RuntimeError("sem internet há 5 minutos; fica para a próxima execução") from None
+            time.sleep(15)
 
 
 def para_linha(t):
@@ -226,29 +251,46 @@ def atualizar_xp(pluggy, contas, posicoes, eu):
 
 
 def main():
+    print(f"\n=== {datetime.now(FUSO):%d/%m/%Y %H:%M} ===")
+    # o agendamento e o botão "Sincronizar agora" podem coincidir: só uma sincronização por vez
+    trava = open(RAIZ / "dados" / ".sincronizando", "w")
+    try:
+        fcntl.flock(trava, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        print("Outra sincronização já está rodando; esta foi cancelada.")
+        return
     env = ler_env()
+    esperar_rede()
     pluggy = Pluggy(env["PLUGGY_CLIENT_ID"], env["PLUGGY_CLIENT_SECRET"])
     eu = gerar_painel.carregar_regras()[3]
-    linhas, investimentos = [], []
-    for item_id in [i.strip() for i in env["PLUGGY_ITEM_IDS"].split(",") if i.strip()]:
-        item = pluggy.chamar("GET", f"/items/{item_id}")
-        contas = pluggy.chamar("GET", f"/accounts?itemId={item_id}")["results"]
-        nomes = ", ".join(c["name"] for c in contas) or "sem contas"
-        print(f"Item {item_id[:8]}: {item['status']} · atualizado {item.get('lastUpdatedAt', '')[:10]} · {nomes}")
-        if item["status"] != "UPDATED":
-            print(f"  Atenção: {item.get('statusDetail') or item.get('error')}")
-        for c in contas:
-            if c["type"] == "BANK" and "INTER" in c["name"].upper():
-                tx = pluggy.transacoes(c["id"])
-                linhas += [para_linha(t) for t in tx if t.get("status") == "POSTED"]
-                print(f"  {len(tx)} transações do Inter")
-        inv = pluggy.chamar("GET", f"/investments?itemId={item_id}")["results"]
-        investimentos += inv
-        if inv:
-            print(f"  {len(inv)} investimentos")
-        contas_xp = [c for c in contas if c["type"] == "BANK" and c["name"].upper().startswith("XP")]
-        if contas_xp:
-            atualizar_xp(pluggy, contas_xp, [p for p in inv if p.get("status") == "ACTIVE"], eu)
+    linhas, investimentos, falhas = [], [], 0
+    item_ids = [i.strip() for i in env["PLUGGY_ITEM_IDS"].split(",") if i.strip()]
+    for item_id in item_ids:
+        # um banco com problema não impede de salvar o outro
+        try:
+            item = pluggy.chamar("GET", f"/items/{item_id}")
+            contas = pluggy.chamar("GET", f"/accounts?itemId={item_id}")["results"]
+            nomes = ", ".join(c["name"] for c in contas) or "sem contas"
+            print(f"Item {item_id[:8]}: {item['status']} · atualizado {item.get('lastUpdatedAt', '')[:10]} · {nomes}")
+            if item["status"] != "UPDATED":
+                print(f"  Atenção: {item.get('statusDetail') or item.get('error')}")
+            for c in contas:
+                if c["type"] == "BANK" and "INTER" in c["name"].upper():
+                    tx = pluggy.transacoes(c["id"])
+                    linhas += [para_linha(t) for t in tx if t.get("status") == "POSTED"]
+                    print(f"  {len(tx)} transações do Inter")
+            inv = pluggy.chamar("GET", f"/investments?itemId={item_id}")["results"]
+            investimentos += inv
+            if inv:
+                print(f"  {len(inv)} investimentos")
+            contas_xp = [c for c in contas if c["type"] == "BANK" and c["name"].upper().startswith("XP")]
+            if contas_xp:
+                atualizar_xp(pluggy, contas_xp, [p for p in inv if p.get("status") == "ACTIVE"], eu)
+        except Exception as e:
+            falhas += 1
+            print(f"Atenção: item {item_id[:8]} falhou ({e}); os outros seguem")
+    if falhas == len(item_ids):
+        raise RuntimeError("nenhum banco respondeu; nada foi alterado")
 
     INVESTIMENTOS.write_text(json.dumps({"atualizado_em": date.today().isoformat(),
                                          "sincronizado_em": datetime.now(FUSO).isoformat(timespec="seconds"),
