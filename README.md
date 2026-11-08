@@ -1,6 +1,68 @@
 # Meu Painel Financeiro
 
-Painel pessoal com entradas, saídas, categorias, insights e investimentos, a partir do extrato do Inter. A XP entra depois.
+Painel de finanças pessoais que junta a conta do **Inter** e a corretora **XP** num só lugar. O que ele faz:
+- busca o extrato e os investimentos sozinho, via Open Finance;
+- categoriza cada gasto;
+- gera insights;
+- compara a carteira com CDI, IPCA e Ibovespa.
+
+Os dados reais nunca saem do computador do dono; a versão pública usa dados fictícios.
+
+**[▶ Ver a demonstração](https://cauaalmeida01.github.io/MeuProjetoFinanceiro/)** · dados fictícios, mesmo código do painel real
+
+| Visão geral | Investimentos |
+|---|---|
+| ![Visão geral: entradas, saídas, categorias e insights](docs/img/geral.png) | ![Investimentos: Inter, XP, CDI e IPCA](docs/img/investimentos.png) |
+
+## Destaques
+
+- **Sincronização automática por Open Finance**:
+  - a [Pluggy](https://pluggy.ai) traz o extrato do Inter e as posições da XP várias vezes ao dia;
+  - quando o Mac acorda sem internet, ela espera a rede voltar;
+  - quando a API demora, tenta de novo;
+  - se um banco falha, o outro é salvo mesmo assim.
+- **Categorização por regras:**
+  - regras por estabelecimento, versionadas;
+  - regras por pessoa, privadas;
+  - detecção automática de Pix para pessoa física.
+  - Com isso, a fatia de gastos sem categoria ("Outros") caiu de 74,5% para 10%.
+- **Conciliação entre bancos:** um Pix do Inter para o próprio CPF só conta como aporte quando o valor aparece na conta da XP. O resto é tratado como transferência entre contas suas.
+- **Rentabilidade contra o CDI, recalculada:** com o CDI diário da API do Banco Central, o cálculo bate com o portal da XP: **115,99% contra 116,02%** do CDI desde a abertura.
+- **Radar B3:** preço, risco (volatilidade e maior queda), proventos e fundamentos das ações, com dados do Yahoo Finance e do Fundamentus. Mostra os números lado a lado, sem recomendação de compra ou venda.
+- **Análise de ações com IA:** um botão roda a skill `/analisar-acao` do Claude Code em segundo plano e devolve um relatório de pesquisa em português.
+- **Servidor local seguro:**
+  - Python puro, sem dependências;
+  - só aceita conexões do próprio computador;
+  - CORS restrito a origens locais;
+  - checagem de Host contra ataques de DNS rebinding;
+  - nomes de arquivo validados contra acesso a outras pastas.
+
+## Arquitetura
+
+```mermaid
+flowchart LR
+  P[Pluggy / Open Finance<br>Inter + XP] --> S[sincronizar_pluggy.py]
+  B[Banco Central<br>CDI e IPCA] --> S
+  Y[Yahoo Finance<br>Fundamentus] --> R[radar_b3.py]
+  S --> D[(dados/<br>privado, fora do Git)]
+  R --> D
+  D --> G[gerar_painel.py<br>classifica e calcula]
+  G --> H[painel/index.html]
+  H --> SV[servidor.py<br>127.0.0.1:8765]
+  SV -- botão Analisar --> C[Claude Code<br>/analisar-acao]
+  F[gerar_demo.py<br>dados fictícios] --> DOCS[docs/index.html<br>GitHub Pages]
+```
+
+**Stack:**
+- **Python 3**, só biblioteca padrão.
+- **Front-end:** HTML, CSS e JavaScript puros, com gráficos em Chart.js.
+- **Agendamento:** launchd (macOS).
+- **Dados externos:** APIs da Pluggy, do Banco Central (SGS), do Yahoo Finance, do Fundamentus e da brapi.
+
+**Privacidade como requisito:**
+- extrato, nomes de terceiros e chaves ficam em `dados/` e `.env`, os dois no `.gitignore`;
+- o repositório só tem código e regras genéricas;
+- a demo pública é gerada por `scripts/gerar_demo.py` sem ler nada de `dados/`.
 
 ## Estrutura
 
@@ -13,10 +75,11 @@ scripts/indices_bcb.py       baixa CDI e IPCA do Banco Central
 scripts/radar_b3.py          Radar B3: cotações, proventos e fundamentos das suas ações
 scripts/servidor.py          abre o painel com os botões (adicionar ação, analisar, sincronizar)
 scripts/ligar_painel.sh      deixa o servidor sempre ligado no Mac e cria o app "Painel Financeiro"
+scripts/agendar_sincronizacao.sh liga/desliga a sincronização automática no Mac
+scripts/gerar_demo.py        gera a demonstração pública (docs/) com dados fictícios
 .claude/skills/analisar-acao skill /analisar-acao TICKER (relatório de pesquisa em português)
-scripts/agendar_sincronizacao.sh liga/desliga a sincronização diária no Mac
 painel/base.html            o painel (HTML + gráficos), sem dados
-template/livro-caixa.html   versão de demonstração com dados fictícios
+docs/                       demonstração pública (GitHub Pages)
 
 dados/                      NÃO vai para o GitHub
   inter_extrato.psv         histórico bruto do Inter
@@ -27,6 +90,14 @@ dados/                      NÃO vai para o GitHub
 painel/index.html           gerado, com seus dados (NÃO vai para o GitHub)
 ```
 
+## Atualizar a demonstração
+
+```bash
+python3 scripts/gerar_demo.py
+```
+
+O script gera `docs/index.html` a partir de uma pessoa fictícia, a "Ana Exemplo", com 24 meses de extrato. O extrato passa pelo mesmo classificador do painel real. CDI, IPCA e cotações são dados públicos, buscados na hora. Faça commit e push, e o GitHub Pages publica sozinho.
+
 ## Painel sempre ligado no Mac
 
 ```bash
@@ -34,7 +105,7 @@ scripts/ligar_painel.sh            # liga uma vez; depois sobe sozinho ao entrar
 scripts/ligar_painel.sh remover    # desliga
 ```
 
-O script transforma o `servidor.py` num serviço do macOS, como o agendamento das 13h:
+O script transforma o `servidor.py` num serviço do macOS, como o agendamento da sincronização:
 - ele fica rodando em segundo plano em `http://127.0.0.1:8765`, uma porta acessível só deste Mac;
 - se cair, volta sozinho;
 - o app **Painel Financeiro**, em `~/Applications`, abre o painel no navegador e pode ir para o Dock.

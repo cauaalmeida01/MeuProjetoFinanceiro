@@ -507,6 +507,7 @@ const INV=/*__INTERINV__*/null;
 const SYNC=/*__SYNC__*/null;
 const IND=/*__INDICES__*/null;
 const RADAR=/*__RADAR__*/null;
+const DEMO=/*__DEMO__*/false;  // true só na demonstração pública (scripts/gerar_demo.py)
 const MES=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 const MES_L=['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
 const DOW=['domingo','segunda','terça','quarta','quinta','sexta','sábado'];
@@ -994,6 +995,7 @@ async function poll(){
   if(Object.values(ST.tarefas).some(v=>v.estado==='rodando'))pollT=setTimeout(poll,4000);
 }
 async function initLocal(){
+  if(DEMO)return;  // a demonstração pública nunca fala com o servidor do dono
   // servido pelo scripts/servidor.py: API no mesmo endereço. Live Server (ou outra página local): procura o servidor na 8765.
   if(!window.SERVIDOR_LOCAL){
     if(!/^(127\.0\.0\.1|localhost)$/.test(location.hostname))return;  // como arquivo ou no Claude: sem botões
@@ -1060,6 +1062,11 @@ $('theme').addEventListener('click',e=>{const b=e.target.closest('button');if(!b
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change',()=>{drawTheme();drawCharts()});
 new MutationObserver(drawCharts).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
 drawTheme();
+if(DEMO){
+  $('src-badge').innerHTML='<i style="background:var(--warn)"></i>Demonstração · dados fictícios';
+  document.querySelector('header.top .eyebrow').textContent='Projeto pessoal · demonstração';
+  document.querySelector('header.top p').innerHTML='Painel de finanças pessoais com extrato, categorias automáticas, insights e investimentos. Esta é uma <b>demonstração com dados fictícios</b>: o painel real roda no computador do dono, com os dados do banco sincronizados por Open Finance. <a href="https://github.com/cauaalmeida01/MeuProjetoFinanceiro">Código no GitHub</a>.';
+}
 if(SYNC){const d=new Date(SYNC);$('synced').hidden=false;
   $('synced').textContent=`Atualizado a última vez: ${d.toLocaleDateString('pt-BR')} às ${d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}`}
 
