@@ -8,3 +8,8 @@ painel/index.html
 # Sistema
 .DS_Store
 __pycache__/
+
+# Ambiente de desenvolvimento
+.venv/
+.pytest_cache/
+.ruff_cache/

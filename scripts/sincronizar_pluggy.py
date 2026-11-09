@@ -101,12 +101,14 @@ def para_linha(t):
     titulo, _, desc = t["description"].partition(" - ")
     titulo = titulo.strip()
     tipo = "COMPRA_DEBITO" if titulo == "Compra no débito" else t.get("operationType") or ""
+    pag = t.get("paymentData") or {}
     return {
         "data": quando.date().isoformat(),
         "titulo": titulo,
         "descricao": re.sub(r"\s+", " ", desc).strip(),
         "valor": f"{t['amount']:g}",
         "tipo": tipo,
+        "banco": ((pag.get("payer") if t["amount"] > 0 else pag.get("receiver")) or {}).get("routingNumberISPB") or "",
         "_quando": quando,
     }
 

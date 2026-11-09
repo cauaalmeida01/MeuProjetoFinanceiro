@@ -14,7 +14,8 @@ from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parent.parent
 HISTORICO = RAIZ / "dados" / "inter_extrato.psv"
-CAMPOS = ["data", "titulo", "descricao", "valor", "tipo"]
+# banco: ISPB da outra ponta do Pix (vem da Pluggy; vazio no histórico antigo)
+CAMPOS = ["data", "titulo", "descricao", "valor", "tipo", "banco"]
 
 
 def ler(caminho):
@@ -44,7 +45,7 @@ def juntar(novo, inicio=None):
     with open(HISTORICO, "w", encoding="utf-8", newline="") as f:
         w = csv.DictWriter(f, fieldnames=CAMPOS, delimiter="|", lineterminator="\n")
         w.writeheader()
-        w.writerows({k: l[k] for k in CAMPOS} for l in linhas)
+        w.writerows({k: l.get(k) or "" for k in CAMPOS} for l in linhas)
 
     print(f"A partir de {inicio}: {len(antigo) - len(mantidos)} linhas antigas trocadas por {len(novo)} novas.")
     print(f"Histórico: {len(linhas)} transações, de {linhas[0]['data']} a {linhas[-1]['data']}.")

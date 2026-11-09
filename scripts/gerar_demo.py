@@ -55,7 +55,7 @@ def extrato(meses):
     linhas, envios_xp = [], []
     for i, (ano, mes) in enumerate(meses):
         ultimo = (date(ano + mes // 12, mes % 12 + 1, 1) - timedelta(days=1)).day
-        dia = lambda: date(ano, mes, rnd.randint(1, ultimo)).isoformat()  # noqa: E731
+        dia = lambda a=ano, m=mes, u=ultimo: date(a, m, rnd.randint(1, u)).isoformat()  # noqa: E731
         salario = 3200 + 150 * (i // 6)
         linhas.append((date(ano, mes, 5).isoformat(), "Pix recebido", "Empresa Exemplo Tecnologia Ltda", salario))
         if rnd.random() < 0.35:
@@ -134,7 +134,7 @@ def xp(meses, envios_xp, ind):
     ap = defaultdict(float)
     for d, v in envios_xp:
         ap[d[:7]] += v
-    mensal, final, ant = [], 0.0, None
+    mensal, final = [], 0.0
     for ano, mes in meses:
         m = f"{ano}-{mes:02d}"
         ultimo = (date(ano + mes // 12, mes % 12 + 1, 1) - timedelta(days=1))
@@ -145,7 +145,6 @@ def xp(meses, envios_xp, ind):
         mensal.append({"data": ultimo.isoformat(), "inicial": round(inicial, 2), "aportes_liquidos": ap[m],
                        "rendimento": round(rend, 2), "final": round(final, 2), "rent_pct": round(rent, 2),
                        "pct_cdi": None, "fonte": "pluggy"})
-        ant = ultimo
     pos = [("Tesouro Direto", "Selic", "Tesouro Selic 2029", 0.30, 0.26), ("Renda Fixa", "Pós-fixado", "CDB Banco Exemplo 2028", 0.25, 0.23),
            ("Tesouro Direto", "IPCA+", "Tesouro IPCA+ 2035", 0.15, 0.145), ("Ações", "Renda variável", "WEGE3", 0.10, 0.085),
            ("Ações", "Renda variável", "ITSA4", 0.08, 0.075), ("Ações", "Renda variável", "BOVA11", 0.12, 0.11)]
@@ -194,7 +193,7 @@ def radar(dados_xp, ind):
             a["carteira"]["valor"] = round(a["carteira"]["quantidade"] * a["preco"], 2)
         _, serie, _ = radar_b3.historico("^BVSP")
         ibov = {"nome": "Ibovespa", "pontos": round(serie[-1][1]), "data": serie[-1][0],
-                **{k: round(v, 2) for k, v in radar_b3.metricas(serie).items()},
+                **{k: round(v, 2) if v is not None else None for k, v in radar_b3.metricas(serie).items()},
                 "serie": [[d, round(c)] for d, c in serie[::max(1, len(serie) // 60)]]}
         cdi_12m = gp.resumo_indices(ind)["cdi_12m"] if ind else None
         return {"atualizado_em": date.today().isoformat(), "ibovespa": ibov, "cdi_12m": cdi_12m,

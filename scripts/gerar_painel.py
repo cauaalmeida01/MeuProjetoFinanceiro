@@ -199,13 +199,60 @@ def ultima_sincronizacao():
     return json.loads(PLUGGY.read_text(encoding="utf-8")).get("sincronizado_em")
 
 
-def classificar(data, titulo, desc, valor, cats, destinos, origens, eu, conc):
+def carregar_contas_proprias():
+    """Outras contas suas, pelo ISPB do banco: {"31872495": {"nome": "C6", "recebido": "Categoria"}}.
+
+    Pix do próprio nome vindo de uma delas, com "recebido" definido, conta como entrada nessa
+    categoria (ex.: comissão recebida noutra conta). Fica em dados/regras_pessoais.json.
+    """
+    if not REGRAS_PESSOAIS.exists():
+        return {}
+    return json.loads(REGRAS_PESSOAIS.read_text(encoding="utf-8")).get("contas_proprias", {})
+
+
+def carregar_neutros():
+    """Movimentações que não são receita nem gasto seu (ex.: dinheiro de terceiros que só passou pela conta).
+
+    Cada regra em dados/regras_pessoais.json → "neutros": {"categoria", "descricao" (trecho), e opcionais
+    "titulo", "banco" (ISPB), "desde" e "ate" (AAAA-MM-DD)}.
+    """
+    if not REGRAS_PESSOAIS.exists():
+        return []
+    return json.loads(REGRAS_PESSOAIS.read_text(encoding="utf-8")).get("neutros", [])
+
+
+def carregar_ajustes():
+    """Lançamentos manuais que o extrato não mostra sozinho (ex.: a parte de um repasse que era comissão).
+
+    dados/regras_pessoais.json → "ajustes": [{"data", "descricao", "valor", "categoria", "tipo": "entrada"|"saida"}].
+    Aparecem no extrato como "Ajuste manual".
+    """
+    if not REGRAS_PESSOAIS.exists():
+        return []
+    ajustes = json.loads(REGRAS_PESSOAIS.read_text(encoding="utf-8")).get("ajustes", [])
+    return [[a["data"], a["descricao"], a["categoria"], a["tipo"], round(abs(a["valor"]), 2), "Ajuste manual", "Inter", ""]
+            for a in ajustes]
+
+
+def neutro(data, titulo, desc, banco, regras):
+    d = desc.lower()
+    for r in regras:
+        if (r["descricao"].lower() in d and r.get("titulo", titulo) == titulo and r.get("banco", banco) == banco
+                and r.get("desde", data) <= data <= r.get("ate", data)):
+            return r["categoria"]
+    return None
+
+
+def classificar(data, titulo, desc, valor, cats, destinos, origens, eu, conc, banco="", proprias=None, neutros=()):
     """Devolve (tipo, categoria). tipo: entrada | saida | aporte | resgate | transf."""
     d = desc.lower()
     if titulo in APORTE:
         return "aporte", "Inter"
     if titulo in RESGATE:
         return "resgate", "Inter"
+    cat = neutro(data, titulo, desc, banco or "", neutros)
+    if cat:
+        return "transf", cat
     if any(n in d for n in eu):
         # Pix para o próprio CPF: só conta como XP o que foi conciliado com o extrato de lá;
         # o resto foi para outra conta sua e não é gasto nem entrada
@@ -214,6 +261,9 @@ def classificar(data, titulo, desc, valor, cats, destinos, origens, eu, conc):
         if conc[lado][chave] > 0:
             conc[lado][chave] -= 1
             return ("aporte", "XP") if valor < 0 else ("resgate", "XP")
+        conta = (proprias or {}).get(banco or "", {})
+        if valor > 0 and titulo == "Pix recebido" and conta.get("recebido"):
+            return "entrada", conta["recebido"]
         return "transf", "Entre suas contas"
     if titulo in DEVOLUCAO_ENTRADA:
         return "entrada", "Estornos e devoluções"
@@ -235,20 +285,25 @@ def classificar(data, titulo, desc, valor, cats, destinos, origens, eu, conc):
 def main():
     cats, destinos, origens, eu = carregar_regras()
     xp, conc = carregar_xp()
+    proprias = carregar_contas_proprias()
+    neutros = carregar_neutros()
     linhas = list(csv.DictReader(EXTRATO.open(encoding="utf-8"), delimiter="|"))
     tx = []
     for l in linhas:
         v = float(l["valor"])
         desc = l["descricao"].strip() or l["titulo"]
-        tipo, cat = classificar(l["data"], l["titulo"], desc, v, cats, destinos, origens, eu, conc)
+        tipo, cat = classificar(l["data"], l["titulo"], desc, v, cats, destinos, origens, eu, conc,
+                                l.get("banco"), proprias, neutros)
         prod = produto(tipo, cat, desc)
         if prod:
             cat = "Investimentos"
         tx.append([l["data"], desc, cat, tipo, round(abs(v), 2), l["titulo"], "Inter", prod])
+    tx = sorted(tx + carregar_ajustes(), key=lambda t: t[0])
 
     SAIDA_JSON.write_text(json.dumps(tx, ensure_ascii=False), encoding="utf-8")
     ind = carregar_indices()
-    xp_painel = {k: v for k, v in xp.items() if not k.startswith("_") and k not in ("envios_inter_para_xp", "retornos_xp_para_inter", "fotos_mensais")} if xp else None
+    privados = ("envios_inter_para_xp", "retornos_xp_para_inter", "fotos_mensais")
+    xp_painel = {k: v for k, v in xp.items() if not k.startswith("_") and k not in privados} if xp else None
     xp_painel = recalcular_xp(xp_painel, ind)
     html = (BASE.read_text(encoding="utf-8")
             .replace("/*__DADOS__*/[]", json.dumps(tx, ensure_ascii=False))

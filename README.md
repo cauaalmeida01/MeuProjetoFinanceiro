@@ -1,5 +1,7 @@
 # Meu Painel Financeiro
 
+[![Testes](https://github.com/cauaalmeida01/MeuProjetoFinanceiro/actions/workflows/testes.yml/badge.svg)](https://github.com/cauaalmeida01/MeuProjetoFinanceiro/actions/workflows/testes.yml)
+
 Painel de finanças pessoais que junta a conta do **Inter** e a corretora **XP** num só lugar. O que ele faz:
 - busca o extrato e os investimentos sozinho, via Open Finance;
 - categoriza cada gasto;
@@ -77,6 +79,7 @@ scripts/servidor.py          abre o painel com os botões (adicionar ação, ana
 scripts/ligar_painel.sh      deixa o servidor sempre ligado no Mac e cria o app "Painel Financeiro"
 scripts/agendar_sincronizacao.sh liga/desliga a sincronização automática no Mac
 scripts/gerar_demo.py        gera a demonstração pública (docs/) com dados fictícios
+tests/                       testes automatizados (pytest)
 .claude/skills/analisar-acao skill /analisar-acao TICKER (relatório de pesquisa em português)
 painel/base.html            o painel (HTML + gráficos), sem dados
 docs/                       demonstração pública (GitHub Pages)
@@ -89,6 +92,27 @@ dados/                      NÃO vai para o GitHub
   transacoes.json           gerado
 painel/index.html           gerado, com seus dados (NÃO vai para o GitHub)
 ```
+
+## Testes
+
+```bash
+python3 -m venv .venv
+.venv/bin/pip install pytest ruff
+.venv/bin/pytest
+.venv/bin/ruff check .
+```
+
+São 221 testes, que rodam em cerca de 1 segundo, a cada push, pelo GitHub Actions. Eles cobrem:
+- as regras de classificação e a conciliação entre bancos;
+- os cálculos contra CDI e IPCA;
+- a junção do extrato sem duplicar;
+- a sincronização: novas tentativas, falha de um banco, fuso horário;
+- a atualização das posições da XP;
+- o Radar B3;
+- a segurança do servidor: origens de fora, acesso a outras pastas, tickers inválidos;
+- a garantia de que a demo não contém dados reais.
+
+Os testes nunca acessam a internet nem a pasta `dados/`: um fixture aponta todos os caminhos para uma pasta temporária e bloqueia a rede.
 
 ## Atualizar a demonstração
 

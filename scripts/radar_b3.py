@@ -21,7 +21,7 @@ import sys
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parent.parent
@@ -64,10 +64,10 @@ def historico(simbolo):
     if not res:
         raise ValueError(((r.get("chart") or {}).get("error") or {}).get("description") or "sem dados")
     res = res[0]
-    quando = [datetime.fromtimestamp(t, timezone.utc).date().isoformat() for t in res["timestamp"]]
+    quando = [datetime.fromtimestamp(t, UTC).date().isoformat() for t in res["timestamp"]]
     fech = res["indicators"]["quote"][0]["close"]
-    serie = [(d, c) for d, c in zip(quando, fech) if c is not None]
-    divs = sorted((datetime.fromtimestamp(int(t), timezone.utc).date().isoformat(), v["amount"])
+    serie = [(d, c) for d, c in zip(quando, fech, strict=False) if c is not None]
+    divs = sorted((datetime.fromtimestamp(int(t), UTC).date().isoformat(), v["amount"])
                   for t, v in (res.get("events") or {}).get("dividends", {}).items())
     return res["meta"], serie, divs
 
@@ -77,7 +77,7 @@ def metricas(serie):
     precos = [c for _, c in serie]
     ult = precos[-1]
     ret = lambda n: (ult / precos[-n - 1] - 1) * 100 if len(precos) > n else None  # noqa: E731
-    diarios = [math.log(b / a) for a, b in zip(precos, precos[1:])]
+    diarios = [math.log(b / a) for a, b in zip(precos, precos[1:], strict=False)]
     media = sum(diarios) / len(diarios)
     vol = math.sqrt(sum((x - media) ** 2 for x in diarios) / (len(diarios) - 1)) * math.sqrt(252) * 100
     pico, queda = precos[0], 0.0
@@ -217,7 +217,7 @@ def main(args):
             falhas.append(f"{t} ({e})")
     meta, serie, _ = historico("^BVSP")
     ibov = {"nome": "Ibovespa", "pontos": round(serie[-1][1]), "data": serie[-1][0],
-            **{k: round(v, 2) for k, v in metricas(serie).items()},
+            **{k: round(v, 2) if v is not None else None for k, v in metricas(serie).items()},
             "serie": [[d, round(c)] for d, c in serie[::max(1, len(serie) // 60)]]}
     cdi_12m = None
     if INDICES.exists():

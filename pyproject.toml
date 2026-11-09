@@ -1,0 +1,26 @@
+[project]
+name = "meu-painel-financeiro"
+version = "1.0.0"
+description = "Painel de finanças pessoais com Open Finance, categorização, investimentos e Radar B3"
+requires-python = ">=3.11"
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["scripts"]
+
+[tool.ruff]
+line-length = 160
+target-version = "py311"
+
+[tool.ruff.lint.isort]
+known-first-party = ["gerar_demo", "gerar_painel", "importar_extrato", "indices_bcb", "radar_b3", "servidor", "sincronizar_pluggy"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+ignore = [
+    "E402",  # scripts/ ajusta o sys.path antes de importar os módulos vizinhos
+    "E741", "E743",  # "l" para linha é o idioma do projeto
+]
