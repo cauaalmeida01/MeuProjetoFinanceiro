@@ -6,6 +6,7 @@ import pytest
 
 import gerar_demo as d
 import gerar_painel as gp
+import importar_extrato as ie
 
 MESES = [(2025, m) for m in range(1, 13)] + [(2026, m) for m in range(1, 13)]
 SENTINELA = "NOME-REAL-SENTINELA"
@@ -45,7 +46,7 @@ def demo(monkeypatch):
     gp.REGRAS_PESSOAIS.write_text(json.dumps({"voce_mesmo": [SENTINELA], "destinos": {SENTINELA: "Lazer"}}), encoding="utf-8")
     gp.XP.write_text(json.dumps({"patrimonio": 987654.32, "nome": SENTINELA}), encoding="utf-8")
     gp.INTER_INV.write_text(json.dumps({"total": 987654.32, "nome": SENTINELA}), encoding="utf-8")
-    gp.EXTRATO.write_text(f"data|titulo|descricao|valor|tipo\n2026-01-01|Pix enviado|{SENTINELA}|-1|PIX\n", encoding="utf-8")
+    ie.juntar([{"data": "2026-01-01", "titulo": "Pix enviado", "descricao": SENTINELA, "valor": "-1", "tipo": "PIX"}])
     gp.RADAR.write_text(json.dumps({"nome": SENTINELA}), encoding="utf-8")
     hoje = date.today()
     ind = {"cdi": {(hoje - timedelta(days=k)).isoformat(): 0.05 for k in range(800)},
@@ -77,4 +78,4 @@ def test_demo_nao_tem_futuro(demo):
 
 def test_template_nao_tem_tag_que_quebra_o_live_server():
     """O Live Server injeta um script no primeiro </svg>; dentro do JavaScript isso quebrava a página."""
-    assert "</svg>" not in gp.BASE.read_text(encoding="utf-8")
+    assert "</svg>" not in gp.montar_pagina()

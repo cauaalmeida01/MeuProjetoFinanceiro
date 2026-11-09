@@ -27,10 +27,12 @@ Os dados reais nunca saem do computador do dono; a versão pública usa dados fi
   - regras por estabelecimento, versionadas;
   - regras por pessoa, privadas;
   - detecção automática de Pix para pessoa física.
-  - Com isso, a fatia de gastos sem categoria ("Outros") caiu de 74,5% para 10%.
+  - Com isso, a fatia de gastos sem categoria ("Outros") caiu de 74,5% para menos de 6%.
 - **Conciliação entre bancos:** um Pix do Inter para o próprio CPF só conta como aporte quando o valor aparece na conta da XP. O resto é tratado como transferência entre contas suas.
 - **Rentabilidade contra o CDI, recalculada:** com o CDI diário da API do Banco Central, o cálculo bate com o portal da XP: **115,99% contra 116,02%** do CDI desde a abertura.
 - **Radar B3:** preço, risco (volatilidade e maior queda), proventos e fundamentos das ações, com dados do Yahoo Finance e do Fundamentus. Mostra os números lado a lado, sem recomendação de compra ou venda.
+- **Sugestões de categoria com IA local:** um Naive Bayes escrito do zero sugere categorias para o que as regras não reconhecem, e você confirma com um clique. Nenhum dado sai do computador.
+- **Rastreabilidade:** cada lançamento aponta para a regra que o classificou, e o painel mostra esse motivo. Mudanças de categoria ficam no histórico do banco.
 - **Análise de ações com IA:** um botão roda a skill `/analisar-acao` do Claude Code em segundo plano e devolve um relatório de pesquisa em português.
 - **Servidor local seguro:**
   - Python puro, sem dependências;
@@ -40,6 +42,8 @@ Os dados reais nunca saem do computador do dono; a versão pública usa dados fi
   - nomes de arquivo validados contra acesso a outras pastas.
 
 ## Arquitetura
+
+As decisões e o porquê de cada uma estão em [ARQUITETURA.md](ARQUITETURA.md).
 
 ```mermaid
 flowchart LR
@@ -56,7 +60,7 @@ flowchart LR
 ```
 
 **Stack:**
-- **Python 3**, só biblioteca padrão.
+- **Python 3**, só biblioteca padrão, com um banco **SQLite** modelado em cinco tabelas.
 - **Front-end:** HTML, CSS e JavaScript puros, com gráficos em Chart.js.
 - **Agendamento:** launchd (macOS).
 - **Dados externos:** APIs da Pluggy, do Banco Central (SGS), do Yahoo Finance, do Fundamentus e da brapi.
@@ -71,6 +75,7 @@ flowchart LR
 ```
 regras_categorias.json      regras por estabelecimento (iFood → Alimentação…)
 scripts/gerar_painel.py     classifica o extrato e gera o painel
+scripts/base_dados.py       banco SQLite: esquema, migrações e consultas
 scripts/importar_extrato.py junta um extrato novo ao histórico
 scripts/sincronizar_pluggy.py busca o extrato na Pluggy e gera o painel
 scripts/indices_bcb.py       baixa CDI e IPCA do Banco Central
@@ -78,14 +83,17 @@ scripts/radar_b3.py          Radar B3: cotações, proventos e fundamentos das s
 scripts/servidor.py          abre o painel com os botões (adicionar ação, analisar, sincronizar)
 scripts/ligar_painel.sh      deixa o servidor sempre ligado no Mac e cria o app "Painel Financeiro"
 scripts/agendar_sincronizacao.sh liga/desliga a sincronização automática no Mac
+scripts/sugerir_categorias.py sugere categorias para o que está em Outros (Naive Bayes local)
 scripts/gerar_demo.py        gera a demonstração pública (docs/) com dados fictícios
 tests/                       testes automatizados (pytest)
 .claude/skills/analisar-acao skill /analisar-acao TICKER (relatório de pesquisa em português)
-painel/base.html            o painel (HTML + gráficos), sem dados
+painel/base.html            estrutura da página, sem dados
+painel/estilo.css           visual e temas claro/escuro
+painel/app.js               filtros, gráficos, insights e botões
 docs/                       demonstração pública (GitHub Pages)
 
 dados/                      NÃO vai para o GitHub
-  inter_extrato.psv         histórico bruto do Inter
+  financas.db               transações, categorias, regras e histórico de classificação (SQLite)
   regras_pessoais.json      pessoas → categoria, e seus próprios nomes
   xp.json                   posição, evolução mensal e conciliação da XP
   inter_invest.json         posição e evolução mensal dos investimentos do Inter
@@ -102,13 +110,13 @@ python3 -m venv .venv
 .venv/bin/ruff check .
 ```
 
-São 221 testes, que rodam em cerca de 1 segundo, a cada push, pelo GitHub Actions. Eles cobrem:
+São mais de 300 testes, que rodam em cerca de 1 segundo, a cada push, pelo GitHub Actions. Eles cobrem:
 - as regras de classificação e a conciliação entre bancos;
 - os cálculos contra CDI e IPCA;
 - a junção do extrato sem duplicar;
 - a sincronização: novas tentativas, falha de um banco, fuso horário;
 - a atualização das posições da XP;
-- o Radar B3;
+- o Radar B3 e as sugestões de categoria;
 - a segurança do servidor: origens de fora, acesso a outras pastas, tickers inválidos;
 - a garantia de que a demo não contém dados reais.
 
@@ -177,7 +185,7 @@ scripts/agendar_sincronizacao.sh               # liga a sincronização (8h, 12h
 scripts/agendar_sincronizacao.sh remover       # desliga
 ```
 
-O histórico antigo continua em `dados/inter_extrato.psv`; só o período que a Pluggy cobre é substituído. Da XP vêm as posições, o saldo, os proventos e os Pix recebidos do Inter (que entram na conciliação de `envios_inter_para_xp`), gravados em `dados/xp.json`. A cada mês o script guarda o patrimônio da XP em `fotos_mensais` e, a partir de novembro de 2026, calcula aportes e rendimento do mês; a rentabilidade acumulada e o % do CDI são recalculados com o CDI e o IPCA da API pública do Banco Central (`scripts/indices_bcb.py`, salvos em `dados/indices.json`). Encadeando os meses do portal da XP, esse cálculo dá 115,99% do CDI desde a abertura, contra 116,02% do portal. O log, com a data e a hora de cada execução, fica em `dados/sincronizacao.log`. A Pluggy busca os bancos uma vez por dia, então uma compra de hoje normalmente aparece no painel no dia seguinte. A sincronização roda várias vezes ao dia para não perder essa atualização. Ela espera a internet voltar se o Mac acabou de acordar, tenta de novo quando a Pluggy demora e salva um banco mesmo se o outro falhar. A autorização do Open Finance vence em até 12 meses e precisa ser renovada no Meu Pluggy.
+O histórico antigo continua em `dados/financas.db`; só o período que a Pluggy cobre é substituído, numa transação que não deixa o histórico pela metade e mantém a identidade de cada lançamento. Os investimentos do Inter também vêm da Pluggy, gravados em `dados/inter_invest.json`. Da XP vêm as posições, o saldo, os proventos e os Pix recebidos do Inter (que entram na conciliação de `envios_inter_para_xp`), gravados em `dados/xp.json`. A cada mês o script guarda o patrimônio da XP em `fotos_mensais` e, a partir de novembro de 2026, calcula aportes e rendimento do mês; a rentabilidade acumulada e o % do CDI são recalculados com o CDI e o IPCA da API pública do Banco Central (`scripts/indices_bcb.py`, salvos em `dados/indices.json`). Encadeando os meses do portal da XP, esse cálculo dá 115,99% do CDI desde a abertura, contra 116,02% do portal. O log, com a data e a hora de cada execução, fica em `dados/sincronizacao.log`. A Pluggy busca os bancos uma vez por dia, então uma compra de hoje normalmente aparece no painel no dia seguinte. A sincronização roda várias vezes ao dia para não perder essa atualização. Ela espera a internet voltar se o Mac acabou de acordar, tenta de novo quando a Pluggy demora e salva um banco mesmo se o outro falhar. A autorização do Open Finance vence em até 12 meses e precisa ser renovada no Meu Pluggy.
 
 ## Radar B3 e /analisar-acao
 
@@ -206,6 +214,8 @@ Com o Claude Code aberto nesta pasta, `/analisar-acao PETR4` monta um relatório
 3. `python3 scripts/gerar_painel.py`
 
 ## Categorias
+
+Com o painel aberto pelo `servidor.py`, a seção **Revisar "Outros"**, na Visão geral, lista os maiores gastos sem categoria, com a sugestão do modelo quando ele tem confiança. Ao salvar, a escolha vira uma regra sua em `dados/regras_pessoais.json`. Para ver as métricas do modelo: `python3 scripts/sugerir_categorias.py`.
 
 - Estabelecimentos: `regras_categorias.json`. A primeira regra que bater vence.
 - Pessoas: `dados/regras_pessoais.json`. Em `destinos` ficam os Pix enviados (amigos, família, faxina…) e em `origens`, os recebidos (ex.: família). Essas regras têm prioridade.

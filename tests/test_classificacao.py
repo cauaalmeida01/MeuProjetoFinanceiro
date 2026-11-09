@@ -3,7 +3,7 @@ from collections import Counter
 
 import pytest
 
-from gerar_painel import acumulado, classificar, neutro, parece_pessoa, por_regra, produto
+from gerar_painel import acumulado, classificar, motivo, neutro, parece_pessoa, por_regra, produto
 
 CATS = [("Alimentação", ["ifood"]), ("Transporte", ["uber"])]
 EU = ["ana exemplo"]
@@ -15,7 +15,7 @@ def conc(envio=(), retorno=()):
 
 
 def c(titulo, desc, valor, data="2026-01-10", destinos=(), origens=(), concil=None, **kw):
-    return classificar(data, titulo, desc, valor, CATS, list(destinos), list(origens), EU, concil or conc(), **kw)
+    return classificar(data, titulo, desc, valor, CATS, list(destinos), list(origens), EU, concil or conc(), **kw)[:2]
 
 
 @pytest.mark.parametrize("titulo", ["Aplicação", "Aplicação em fundos"])
@@ -76,12 +76,12 @@ def test_movimentacao_neutra_nao_conta_como_receita():
 @pytest.mark.parametrize("data,esperado", [("2026-07-31", None), ("2026-08-01", "R"), ("2026-08-31", "R"), ("2026-09-01", None)])
 def test_regra_neutra_respeita_o_periodo(data, esperado):
     regras = [{"categoria": "R", "descricao": "x", "desde": "2026-08-01", "ate": "2026-08-31"}]
-    assert neutro(data, "Pix", "X", "", regras) == esperado
+    assert (neutro(data, "Pix", "X", "", regras) or {}).get("categoria") == esperado
 
 
 def test_regra_neutra_filtra_por_banco():
     regras = [{"categoria": "R", "descricao": "x", "banco": C6}]
-    assert neutro("2026-01-01", "Pix", "X", C6, regras) == "R"
+    assert neutro("2026-01-01", "Pix", "X", C6, regras)["categoria"] == "R"
     assert neutro("2026-01-01", "Pix", "X", "00416968", regras) is None
 
 
@@ -112,7 +112,7 @@ def test_boleto_sem_regra():
 
 
 def test_pix_para_pessoa_fisica():
-    assert c("Pix enviado", "Maria Souza Lima", -30) == ("saida", "Pix para pessoas")
+    assert c("Pix enviado", "Joana Moura Lima", -30) == ("saida", "Pix para pessoas")
 
 
 def test_pix_para_empresa_sem_regra_vai_para_outros():
@@ -120,14 +120,14 @@ def test_pix_para_empresa_sem_regra_vai_para_outros():
 
 
 def test_compra_sem_regra_vai_para_outros():
-    assert c("Compra no débito", "Maria Souza Lima", -30) == ("saida", "Outros")
+    assert c("Compra no débito", "Joana Moura Lima", -30) == ("saida", "Outros")
 
 
 @pytest.mark.parametrize("desc,esperado", [
-    ("Maria Souza Lima", True),
-    ("Amori", False),
-    ("Bytedance Brasil Tecnologia Ltda", False),
-    ("Okto Pagamentos S.a.", False),
+    ("Joana Moura Lima", True),
+    ("Aurora", False),
+    ("Beta Brasil Tecnologia Ltda", False),
+    ("Alfa Pagamentos S.a.", False),
 ])
 def test_parece_pessoa(desc, esperado):
     assert parece_pessoa(desc) is esperado
@@ -135,7 +135,7 @@ def test_parece_pessoa(desc, esperado):
 
 def test_primeira_regra_vence():
     cats = [("A", ["bar"]), ("B", ["barbearia"])]
-    assert por_regra("Barbearia Corte", cats) == "A"
+    assert por_regra("Barbearia Corte", cats) == ("A", "bar")
 
 
 def test_por_regra_sem_correspondencia():
@@ -156,3 +156,45 @@ def test_produto(tipo, cat, desc, esperado):
 def test_acumulado_e_composto():
     assert acumulado([10, 10]) == pytest.approx(21)
     assert acumulado([]) == 0
+
+
+@pytest.mark.parametrize("titulo,desc,valor,kw,regra", [
+    ("Aplicação", "CDB", -100, {}, ("operacao", "Aplicação")),
+    ("Compra no débito", "IFOOD *X", -40, {}, ("estabelecimento", "ifood")),
+    ("Compra no débito", "Loja", -40, {"destinos": [("loja", "Lazer")]}, ("destino", "loja")),
+    ("Pix recebido", "Pai", 10, {"origens": [("pai", "Família")]}, ("origem", "pai")),
+    ("Pix recebido", "Fulano", 10, {}, ("padrao", "pix recebido")),
+    ("Pix enviado", "Ana Exemplo", -10, {}, ("padrao", "proprio nome")),
+    ("Pix enviado", "Joana Moura Lima", -10, {}, ("padrao", "pix para pessoa")),
+    ("Compra no débito", "Loja", -10, {}, ("padrao", "sem regra")),
+    ("Pagamento efetuado", "Conta", -10, {}, ("operacao", "Pagamento efetuado")),
+])
+def test_resultado_informa_a_regra_que_decidiu(titulo, desc, valor, kw, regra):
+    args = {"destinos": [], "origens": [], **kw}
+    assert classificar("2026-01-10", titulo, desc, valor, CATS, args["destinos"], args["origens"], EU, conc()).regra == regra
+
+
+def test_regra_de_conciliacao_e_de_conta_propria():
+    r = classificar("2026-01-10", "Pix enviado", "Ana Exemplo", -200, CATS, [], [], EU, conc([("2026-01-10", 200)]))
+    assert r.regra == ("conciliacao", "corretora")
+    r = classificar("2026-01-10", "Pix recebido", "Ana Exemplo", 400, CATS, [], [], EU, conc(), banco=C6, proprias={C6: {"recebido": "Comissão"}})
+    assert r.regra == ("conta_propria", C6)
+
+
+def test_regra_neutra_e_informada():
+    regras = [{"categoria": "R", "descricao": "Banco X"}]
+    assert classificar("2026-01-10", "Pix recebido", "Banco X", 5, CATS, [], [], EU, conc(), neutros=regras).regra == ("neutra", "banco x")
+
+
+@pytest.mark.parametrize("regra,texto", [
+    (("estabelecimento", "ifood"), 'Regra de estabelecimento: contém "ifood"'),
+    (("padrao", "sem regra"), "Nenhuma regra reconheceu"),
+    (("conciliacao", "corretora"), "Conciliado com o extrato da corretora"),
+])
+def test_motivo_em_portugues(regra, texto):
+    assert motivo(regra) == texto
+
+
+def test_motivo_de_regra_confirmada_mostra_a_data():
+    conhecidas = {("destino", "loja"): {"origem": "revisao", "criada_em": "2026-11-08T21:00:00-03:00"}}
+    assert motivo(("destino", "loja"), conhecidas) == "Você confirmou esta categoria em 08/11/2026"

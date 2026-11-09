@@ -1,11 +1,11 @@
 """Isolamento dos testes: nenhum teste lê dados/ de verdade nem acessa a internet."""
 import urllib.request
 
+import base_dados
 import pytest
 
 import gerar_demo
 import gerar_painel
-import importar_extrato
 import indices_bcb
 import radar_b3
 import servidor
@@ -21,7 +21,6 @@ def isolar(tmp_path, monkeypatch):
 
     for nome, arquivo in {
         "RAIZ": tmp_path,
-        "EXTRATO": dados / "inter_extrato.psv",
         "REGRAS_PESSOAIS": dados / "regras_pessoais.json",
         "XP": dados / "xp.json",
         "INTER_INV": dados / "inter_invest.json",
@@ -33,7 +32,7 @@ def isolar(tmp_path, monkeypatch):
     }.items():
         monkeypatch.setattr(gerar_painel, nome, arquivo)
 
-    monkeypatch.setattr(importar_extrato, "HISTORICO", dados / "inter_extrato.psv")
+    monkeypatch.setattr(base_dados, "ARQUIVO", dados / "financas.db")
     monkeypatch.setattr(indices_bcb, "INDICES", dados / "indices.json")
     monkeypatch.setattr(sincronizar_pluggy, "RAIZ", tmp_path)
     monkeypatch.setattr(sincronizar_pluggy, "ENV", tmp_path / ".env")

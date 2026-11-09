@@ -2,6 +2,8 @@
 dados/
 painel/index.html
 *.psv
+*.db
+*.db.bak-*
 *.bak
 .env
 

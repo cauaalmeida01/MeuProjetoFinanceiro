@@ -1,26 +1,25 @@
-"""Junta um extrato novo ao histórico em dados/inter_extrato.psv.
+"""Junta um extrato novo ao histórico do banco de dados (ver base_dados.py).
 
 Uso:  python3 scripts/importar_extrato.py caminho/do/novo.psv
 
-O arquivo novo tem o mesmo formato (data|titulo|descricao|valor|tipo).
-Tudo do histórico a partir da primeira data do arquivo novo é substituído
-por ele, então reimportar um período não duplica nada. Depois rode
-scripts/gerar_painel.py.
+O arquivo novo tem o formato data|titulo|descricao|valor|tipo (banco é opcional).
+Tudo do histórico a partir da primeira data do arquivo novo passa a refletir esse arquivo: quem continua
+mantém o id e o histórico de classificação, então reimportar um período não duplica nada.
+Ou entra tudo, ou nada muda. Depois rode scripts/gerar_painel.py.
 """
 import csv
-import shutil
 import sys
-from pathlib import Path
 
-RAIZ = Path(__file__).resolve().parent.parent
-HISTORICO = RAIZ / "dados" / "inter_extrato.psv"
-# banco: ISPB da outra ponta do Pix (vem da Pluggy; vazio no histórico antigo)
-CAMPOS = ["data", "titulo", "descricao", "valor", "tipo", "banco"]
+import base_dados
 
 
 def ler(caminho):
     with open(caminho, encoding="utf-8") as f:
         return list(csv.DictReader(f, delimiter="|"))
+
+
+def ler_historico():
+    return base_dados.ler_transacoes()
 
 
 def main():
@@ -33,22 +32,12 @@ def main():
 
 
 def juntar(novo, inicio=None):
-    """Troca o histórico a partir de `inicio` (padrão: primeira data de `novo`) pelas linhas de `novo`."""
+    """Atualiza o histórico a partir de `inicio` (padrão: primeira data de `novo`) com as linhas de `novo`."""
     inicio = inicio or min(l["data"] for l in novo)
-    novo = [l for l in novo if l["data"] >= inicio]
-    antigo = ler(HISTORICO) if HISTORICO.exists() else []
-    mantidos = [l for l in antigo if l["data"] < inicio]
-    linhas = sorted(mantidos + novo, key=lambda l: l["data"])
-
-    if HISTORICO.exists():
-        shutil.copy(HISTORICO, HISTORICO.with_suffix(".psv.bak"))
-    with open(HISTORICO, "w", encoding="utf-8", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=CAMPOS, delimiter="|", lineterminator="\n")
-        w.writeheader()
-        w.writerows({k: l.get(k) or "" for k in CAMPOS} for l in linhas)
-
-    print(f"A partir de {inicio}: {len(antigo) - len(mantidos)} linhas antigas trocadas por {len(novo)} novas.")
-    print(f"Histórico: {len(linhas)} transações, de {linhas[0]['data']} a {linhas[-1]['data']}.")
+    novo = sorted((l for l in novo if l["data"] >= inicio), key=lambda l: l["data"])
+    r = base_dados.substituir_periodo(novo, inicio)
+    print(f"A partir de {inicio}: {r['inseridas']} novas, {r['removidas']} removidas, {r['mantidas']} sem mudança.")
+    print(f"Histórico: {r['total']} transações, de {r['primeira']} a {r['ultima']}.")
 
 
 if __name__ == "__main__":

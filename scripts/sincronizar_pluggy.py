@@ -106,7 +106,7 @@ def para_linha(t):
         "data": quando.date().isoformat(),
         "titulo": titulo,
         "descricao": re.sub(r"\s+", " ", desc).strip(),
-        "valor": f"{t['amount']:g}",
+        "valor": f"{t['amount']:.2f}",
         "tipo": tipo,
         "banco": ((pag.get("payer") if t["amount"] > 0 else pag.get("receiver")) or {}).get("routingNumberISPB") or "",
         "_quando": quando,
@@ -252,6 +252,62 @@ def atualizar_xp(pluggy, contas, posicoes, eu):
           f"{len(xp['envios_inter_para_xp'])} envios do Inter conciliados")
 
 
+def grupo_inter(p):
+    """Em qual linha da carteira do painel entra cada aplicação do Inter."""
+    if p["type"] == "MUTUAL_FUND":
+        return "Fundos", "Fundo " + re.sub(r"\s+FIC.*$", "", p["name"]).strip()
+    return "Renda fixa", {"CDB": "CDB Banco Inter", "LCI": "LCI IPCA+", "LCA": "LCA"}.get(p.get("subtype"), p["name"])
+
+
+def atualizar_inter(posicoes):
+    """Atualiza dados/inter_invest.json: soma as aplicações por produto e guarda o valor do mês."""
+    if not posicoes or not gerar_painel.INTER_INV.exists():
+        return
+    inv = json.loads(gerar_painel.INTER_INV.read_text(encoding="utf-8"))
+    grupos = {}
+    for p in posicoes:
+        classe, nome = grupo_inter(p)
+        g = grupos.setdefault(nome, {"produto": nome, "classe": classe, "valor": 0.0, "liquido": 0.0, "aplicado": 0.0, "impostos": 0.0,
+                                     "_n": 0, "_venc": [], "_taxas": set(), "_sem_custo": False})
+        g["valor"] += p["amount"]
+        g["liquido"] += p["balance"] if p.get("balance") is not None else p["amount"]  # balance já vem sem IR/IOF
+        g["impostos"] += (p.get("taxes") or 0) + (p.get("taxes2") or 0)
+        g["_n"] += 1
+        if p.get("amountOriginal"):
+            g["aplicado"] += p["amountOriginal"]
+        else:
+            g["_sem_custo"] = True
+        if p.get("dueDate"):
+            g["_venc"].append(dia(p["dueDate"]))
+        if p.get("rate") and p.get("rateType") == "CDI":
+            g["_taxas"].add(p["rate"])
+
+    # a Pluggy não informa quanto foi aplicado em fundos: vale o último valor conhecido
+    aplicado_antes = {x["produto"]: x["aplicado"] for x in inv["posicoes"]}
+    aplicado_antes.setdefault("Fundo Fator Macro", aplicado_antes.get("Fundo Fator Macro (multimercado)", 0))
+    novas = []
+    for g in grupos.values():
+        partes = []
+        if g["_taxas"]:
+            partes.append(" a ".join(f"{t:g}%" for t in sorted(g["_taxas"])) + " do CDI")
+        if g["_n"] > 1:
+            partes.append(f"{g['_n']} aplicações")
+        if g["_venc"]:
+            ini, fim = min(g["_venc"]), max(g["_venc"])
+            partes.append(f"vence {fim:%d/%m/%Y}" if ini == fim else f"vencimentos de {ini:%m/%Y} a {fim:%m/%Y}")
+        aplicado = aplicado_antes.get(g["produto"], g["valor"]) if g["_sem_custo"] else g["aplicado"]
+        novas.append({"produto": g["produto"], "classe": g["classe"], "valor": round(g["valor"], 2), "liquido": round(g["liquido"], 2),
+                      "aplicado": round(aplicado, 2), "impostos": round(g["impostos"], 2), "info": " · ".join(partes) or "Resgate em D+5"})
+    inv["posicoes"] = sorted(novas, key=lambda x: -x["valor"])
+    inv["total"] = round(sum(x["valor"] for x in novas), 2)
+    inv["atualizado_em"] = date.today().isoformat()
+    mes = date.today().strftime("%Y-%m")
+    linhas = [m for m in inv["mensal"] if m["mes"] != mes]
+    inv["mensal"] = sorted(linhas + [{"mes": mes, "valor": inv["total"]}], key=lambda m: m["mes"])
+    gerar_painel.INTER_INV.write_text(json.dumps(inv, ensure_ascii=False, indent=1), encoding="utf-8")
+    print(f"  Inter: {len(posicoes)} aplicações · total R$ {inv['total']:.2f}")
+
+
 def main():
     print(f"\n=== {datetime.now(FUSO):%d/%m/%Y %H:%M} ===")
     # o agendamento e o botão "Sincronizar agora" podem coincidir: só uma sincronização por vez
@@ -285,6 +341,8 @@ def main():
             investimentos += inv
             if inv:
                 print(f"  {len(inv)} investimentos")
+            if any(c["type"] == "BANK" and "INTER" in c["name"].upper() for c in contas):
+                atualizar_inter([p for p in inv if p.get("status") == "ACTIVE"])
             contas_xp = [c for c in contas if c["type"] == "BANK" and c["name"].upper().startswith("XP")]
             if contas_xp:
                 atualizar_xp(pluggy, contas_xp, [p for p in inv if p.get("status") == "ACTIVE"], eu)

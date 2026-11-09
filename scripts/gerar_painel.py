@@ -1,22 +1,26 @@
 """Lê o extrato do Inter, classifica cada transação e gera o painel local.
 
 Uso:  python3 scripts/gerar_painel.py
-Entrada: dados/inter_extrato.psv  (data|titulo|descricao|valor|tipo)
+Entrada: dados/financas.db  (histórico de transações, SQLite)
          regras_categorias.json  (estabelecimentos, versionado)
          dados/regras_pessoais.json  (pessoas e seus nomes, opcional, fora do git)
          dados/xp.json  (posição, evolução mensal e conciliação da XP, opcional)
          dados/inter_invest.json  (posição e evolução dos investimentos do Inter, opcional)
 Saída:   dados/transacoes.json e painel/index.html
 """
-import csv
 import json
 import re
 from collections import Counter, defaultdict
 from datetime import date, timedelta
 from pathlib import Path
+from typing import NamedTuple
+
+import base_dados
+import sugerir_categorias
+
+import importar_extrato
 
 RAIZ = Path(__file__).resolve().parent.parent
-EXTRATO = RAIZ / "dados" / "inter_extrato.psv"
 REGRAS = RAIZ / "regras_categorias.json"
 REGRAS_PESSOAIS = RAIZ / "dados" / "regras_pessoais.json"
 XP = RAIZ / "dados" / "xp.json"
@@ -52,6 +56,14 @@ def produto(tipo, cat, desc):
     return next((nome for trecho, nome in PRODUTOS_INTER if trecho in d), desc)
 
 
+def montar_pagina():
+    """base.html com o estilo e o JavaScript embutidos: o painel continua sendo um arquivo só."""
+    pasta = BASE.parent
+    return (BASE.read_text(encoding="utf-8")
+            .replace("/*__CSS__*/", (pasta / "estilo.css").read_text(encoding="utf-8"))
+            .replace("/*__JS__*/", (pasta / "app.js").read_text(encoding="utf-8")))
+
+
 def carregar_regras():
     r = json.loads(REGRAS.read_text(encoding="utf-8"))
     cats = [(nome, [t.lower() for t in trechos]) for nome, trechos in r["categorias"]]
@@ -64,8 +76,9 @@ def carregar_regras():
 def por_regra(desc, cats):
     d = desc.lower()
     for nome, trechos in cats:
-        if any(t in d for t in trechos):
-            return nome
+        for t in trechos:
+            if t in d:
+                return nome, t
     return None
 
 
@@ -230,7 +243,7 @@ def carregar_ajustes():
     if not REGRAS_PESSOAIS.exists():
         return []
     ajustes = json.loads(REGRAS_PESSOAIS.read_text(encoding="utf-8")).get("ajustes", [])
-    return [[a["data"], a["descricao"], a["categoria"], a["tipo"], round(abs(a["valor"]), 2), "Ajuste manual", "Inter", ""]
+    return [[a["data"], a["descricao"], a["categoria"], a["tipo"], round(abs(a["valor"]), 2), "Ajuste manual", "Inter", "", "Lançamento manual"]
             for a in ajustes]
 
 
@@ -239,20 +252,26 @@ def neutro(data, titulo, desc, banco, regras):
     for r in regras:
         if (r["descricao"].lower() in d and r.get("titulo", titulo) == titulo and r.get("banco", banco) == banco
                 and r.get("desde", data) <= data <= r.get("ate", data)):
-            return r["categoria"]
+            return r
     return None
 
 
+class Resultado(NamedTuple):
+    tipo: str  # entrada | saida | aporte | resgate | transf
+    categoria: str
+    regra: tuple[str, str]  # o que decidiu: (tipo da regra, trecho)
+
+
 def classificar(data, titulo, desc, valor, cats, destinos, origens, eu, conc, banco="", proprias=None, neutros=()):
-    """Devolve (tipo, categoria). tipo: entrada | saida | aporte | resgate | transf."""
+    """Decide o tipo e a categoria do lançamento; a primeira regra que bater vence."""
     d = desc.lower()
     if titulo in APORTE:
-        return "aporte", "Inter"
+        return Resultado("aporte", "Inter", ("operacao", titulo))
     if titulo in RESGATE:
-        return "resgate", "Inter"
-    cat = neutro(data, titulo, desc, banco or "", neutros)
-    if cat:
-        return "transf", cat
+        return Resultado("resgate", "Inter", ("operacao", titulo))
+    r = neutro(data, titulo, desc, banco or "", neutros)
+    if r:
+        return Resultado("transf", r["categoria"], ("neutra", r["descricao"].lower()))
     if any(n in d for n in eu):
         # Pix para o próprio CPF: só conta como XP o que foi conciliado com o extrato de lá;
         # o resto foi para outra conta sua e não é gasto nem entrada
@@ -260,26 +279,60 @@ def classificar(data, titulo, desc, valor, cats, destinos, origens, eu, conc, ba
         lado = "envio" if valor < 0 else "retorno"
         if conc[lado][chave] > 0:
             conc[lado][chave] -= 1
-            return ("aporte", "XP") if valor < 0 else ("resgate", "XP")
+            return Resultado("aporte" if valor < 0 else "resgate", "XP", ("conciliacao", "corretora"))
         conta = (proprias or {}).get(banco or "", {})
         if valor > 0 and titulo == "Pix recebido" and conta.get("recebido"):
-            return "entrada", conta["recebido"]
-        return "transf", "Entre suas contas"
+            return Resultado("entrada", conta["recebido"], ("conta_propria", banco))
+        return Resultado("transf", "Entre suas contas", ("padrao", "proprio nome"))
     if titulo in DEVOLUCAO_ENTRADA:
-        return "entrada", "Estornos e devoluções"
+        return Resultado("entrada", "Estornos e devoluções", ("operacao", titulo))
     if titulo in DEVOLUCAO_SAIDA:
-        return "saida", "Estornos e devoluções"
+        return Resultado("saida", "Estornos e devoluções", ("operacao", titulo))
     if valor > 0:
-        cat = next((c for nome, c in origens if nome in d), None)
-        return "entrada", cat or ("Banco Inter" if "banco inter" in d else "Pix recebido")
-    cat = next((c for nome, c in destinos if nome in d), None) or por_regra(desc, cats)
-    if cat:
-        return "saida", cat
+        origem = next(((nome, c) for nome, c in origens if nome in d), None)
+        if origem:
+            return Resultado("entrada", origem[1], ("origem", origem[0]))
+        if "banco inter" in d:
+            return Resultado("entrada", "Banco Inter", ("padrao", "banco inter"))
+        return Resultado("entrada", "Pix recebido", ("padrao", "pix recebido"))
+    destino = next(((nome, c) for nome, c in destinos if nome in d), None)
+    if destino:
+        return Resultado("saida", destino[1], ("destino", destino[0]))
+    regra = por_regra(desc, cats)
+    if regra:
+        return Resultado("saida", regra[0], ("estabelecimento", regra[1]))
     if titulo == "Pagamento efetuado":
-        return "saida", "Contas e boletos"
+        return Resultado("saida", "Contas e boletos", ("operacao", titulo))
     if titulo in ("Pix enviado", "Transferência enviada") and parece_pessoa(desc):
-        return "saida", "Pix para pessoas"
-    return "saida", "Outros"
+        return Resultado("saida", "Pix para pessoas", ("padrao", "pix para pessoa"))
+    return Resultado("saida", "Outros", ("padrao", "sem regra"))
+
+
+TEXTO_REGRA = {
+    "estabelecimento": 'Regra de estabelecimento: contém "{}"',
+    "destino": 'Regra pessoal de destino: "{}"',
+    "origem": 'Regra pessoal de origem: "{}"',
+    "neutra": 'Movimentação neutra: contém "{}"',
+    "operacao": "Pelo tipo de operação: {}",
+    "conta_propria": "Pix de conta sua em outro banco ({})",
+    "conciliacao": "Conciliado com o extrato da corretora",
+}
+TEXTO_PADRAO = {
+    "proprio nome": "Pix no seu nome, sem conciliação com a corretora",
+    "banco inter": "Recebido do próprio banco",
+    "pix recebido": "Pix recebido sem regra de origem",
+    "pix para pessoa": "Pix para pessoa física sem regra",
+    "sem regra": "Nenhuma regra reconheceu",
+}
+
+
+def motivo(regra, conhecidas=None):
+    """Explica em português por que o lançamento ficou nessa categoria."""
+    info = (conhecidas or {}).get(regra)
+    if info and info["origem"] == "revisao":
+        return f"Você confirmou esta categoria em {info['criada_em'][8:10]}/{info['criada_em'][5:7]}/{info['criada_em'][:4]}"
+    tipo, trecho = regra
+    return TEXTO_PADRAO[trecho] if tipo == "padrao" else TEXTO_REGRA[tipo].format(trecho)
 
 
 def main():
@@ -287,17 +340,22 @@ def main():
     xp, conc = carregar_xp()
     proprias = carregar_contas_proprias()
     neutros = carregar_neutros()
-    linhas = list(csv.DictReader(EXTRATO.open(encoding="utf-8"), delimiter="|"))
-    tx = []
+    linhas = importar_extrato.ler_historico()
+    tx, resultados = [], []
     for l in linhas:
-        v = float(l["valor"])
+        v = l["valor"]
         desc = l["descricao"].strip() or l["titulo"]
-        tipo, cat = classificar(l["data"], l["titulo"], desc, v, cats, destinos, origens, eu, conc,
-                                l.get("banco"), proprias, neutros)
+        tipo, cat, regra = classificar(l["data"], l["titulo"], desc, v, cats, destinos, origens, eu, conc,
+                                       l.get("banco"), proprias, neutros)
         prod = produto(tipo, cat, desc)
         if prod:
             cat = "Investimentos"
-        tx.append([l["data"], desc, cat, tipo, round(abs(v), 2), l["titulo"], "Inter", prod])
+        resultados.append((l["id"], tipo, cat, regra))
+        tx.append([l["data"], desc, cat, tipo, round(abs(v), 2), l["titulo"], "Inter", prod, regra])
+    base_dados.registrar_classificacoes(resultados)
+    conhecidas = base_dados.regras_conhecidas()
+    for t in tx:
+        t[8] = motivo(t[8], conhecidas)
     tx = sorted(tx + carregar_ajustes(), key=lambda t: t[0])
 
     SAIDA_JSON.write_text(json.dumps(tx, ensure_ascii=False), encoding="utf-8")
@@ -305,13 +363,14 @@ def main():
     privados = ("envios_inter_para_xp", "retornos_xp_para_inter", "fotos_mensais")
     xp_painel = {k: v for k, v in xp.items() if not k.startswith("_") and k not in privados} if xp else None
     xp_painel = recalcular_xp(xp_painel, ind)
-    html = (BASE.read_text(encoding="utf-8")
+    html = (montar_pagina()
             .replace("/*__DADOS__*/[]", json.dumps(tx, ensure_ascii=False))
             .replace("/*__XP__*/null", json.dumps(xp_painel, ensure_ascii=False))
             .replace("/*__INTERINV__*/null", json.dumps(carregar_inter_inv(tx), ensure_ascii=False))
             .replace("/*__SYNC__*/null", json.dumps(ultima_sincronizacao()))
             .replace("/*__INDICES__*/null", json.dumps(resumo_indices(ind)))
-            .replace("/*__RADAR__*/null", RADAR.read_text(encoding="utf-8") if RADAR.exists() else "null"))
+            .replace("/*__RADAR__*/null", RADAR.read_text(encoding="utf-8") if RADAR.exists() else "null")
+            .replace("/*__REVISAR__*/[]", json.dumps(sugerir_categorias.revisar(tx, parece_pessoa), ensure_ascii=False)))
     SAIDA_HTML.write_text(html, encoding="utf-8")
 
     # resumo no terminal

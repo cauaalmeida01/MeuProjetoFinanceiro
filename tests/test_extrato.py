@@ -1,5 +1,6 @@
 """Junção do extrato e geração do painel de ponta a ponta."""
 import json
+import sqlite3
 
 import pytest
 
@@ -14,58 +15,62 @@ def l(data, valor="-10", desc="Loja", banco=None):
 
 def test_primeira_importacao():
     ie.juntar([l("2026-01-02"), l("2026-01-01")])
-    assert [x["data"] for x in ie.ler(ie.HISTORICO)] == ["2026-01-01", "2026-01-02"]
+    assert [x["data"] for x in ie.ler_historico()] == ["2026-01-01", "2026-01-02"]
 
 
 def test_reimportar_o_mesmo_periodo_nao_duplica():
     novo = [l("2026-01-01"), l("2026-01-02")]
     ie.juntar(novo)
     ie.juntar(novo)
-    assert len(ie.ler(ie.HISTORICO)) == 2
+    assert len(ie.ler_historico()) == 2
 
 
 def test_historico_antigo_e_preservado():
     ie.juntar([l("2021-05-25", desc="Antiga"), l("2026-01-01", desc="Velha")])
     ie.juntar([l("2026-01-01", desc="Nova")], "2026-01-01")
-    assert [x["descricao"] for x in ie.ler(ie.HISTORICO)] == ["Antiga", "Nova"]
+    assert [x["descricao"] for x in ie.ler_historico()] == ["Antiga", "Nova"]
 
 
 def test_linhas_antes_do_inicio_sao_ignoradas():
     """O primeiro dia da janela da Pluggy pode vir pela metade: fica o que já estava no histórico."""
     ie.juntar([l("2025-11-01", desc="Completa"), l("2025-11-02", desc="Velha")])
     ie.juntar([l("2025-11-01", desc="Metade"), l("2025-11-02", desc="Nova")], "2025-11-02")
-    assert [x["descricao"] for x in ie.ler(ie.HISTORICO)] == ["Completa", "Nova"]
+    assert [x["descricao"] for x in ie.ler_historico()] == ["Completa", "Nova"]
 
 
-def test_coluna_banco_e_preenchida_e_historico_antigo_fica_vazio():
-    ie.HISTORICO.write_text("data|titulo|descricao|valor|tipo\n2021-01-01|T|Antiga|-1|X\n", encoding="utf-8")
-    ie.juntar([l("2026-01-01", banco="31872495")])
-    linhas = ie.ler(ie.HISTORICO)
-    assert [x["banco"] for x in linhas] == ["", "31872495"]
+def test_banco_da_contraparte_e_guardado():
+    ie.juntar([l("2021-01-01"), l("2026-01-01", banco="31872495")])
+    assert [x["banco"] for x in ie.ler_historico()] == ["", "31872495"]
 
 
-def test_guarda_copia_de_seguranca():
-    ie.juntar([l("2026-01-01")])
-    ie.juntar([l("2026-01-02")])
-    assert ie.HISTORICO.with_suffix(".psv.bak").exists()
+def test_erro_no_meio_nao_perde_o_historico():
+    """A troca é uma transação: uma linha inválida desfaz o que já tinha sido feito."""
+    ie.juntar([l("2026-01-01", desc="Original")])
+    with pytest.raises(sqlite3.IntegrityError):
+        ie.juntar([l("2026-01-01", desc="Nova"), l("2026-1", desc="Data inválida")], "2026-01-01")
+    assert [x["descricao"] for x in ie.ler_historico()] == ["Original"]
+
+
+def test_mesmo_dia_mantem_a_ordem_de_chegada():
+    ie.juntar([l("2026-01-01", desc="Primeira"), l("2026-01-01", desc="Segunda")])
+    assert [x["descricao"] for x in ie.ler_historico()] == ["Primeira", "Segunda"]
 
 
 def test_campos_extras_nao_vao_para_o_arquivo():
     ie.juntar([l("2026-01-01") | {"_quando": "objeto"}])
-    assert "_quando" not in ie.HISTORICO.read_text(encoding="utf-8")
+    assert "_quando" not in ie.ler_historico()[0]
 
 
 @pytest.fixture
 def painel():
-    gp.EXTRATO.write_text("\n".join([
-        "data|titulo|descricao|valor|tipo|banco",
-        "2026-08-01|Pix recebido|Banco Inter Sa|150|PIX|00416968",
-        "2026-08-02|Compra no débito|Ifood *Sabor|-40|COMPRA_DEBITO|",
-        "2026-08-03|Pix enviado|Ana Exemplo|-200|PIX|33264668",
-        "2026-08-04|Pix enviado|Ana Exemplo|-100|PIX|31872495",
-        "2026-08-05|Pix recebido|Ana Exemplo|400|PIX|31872495",
-        "2026-08-06|Aplicação|CDB POS DI LIQ|-300|APLICACAO|",
-    ]) + "\n", encoding="utf-8")
+    linhas = """2026-08-01|Pix recebido|Banco Inter Sa|150|PIX|00416968
+2026-08-02|Compra no débito|Ifood *Sabor|-40|COMPRA_DEBITO|
+2026-08-03|Pix enviado|Ana Exemplo|-200|PIX|33264668
+2026-08-04|Pix enviado|Ana Exemplo|-100|PIX|31872495
+2026-08-05|Pix recebido|Ana Exemplo|400|PIX|31872495
+2026-08-06|Aplicação|CDB POS DI LIQ|-300|APLICACAO|""".splitlines()
+    campos = ["data", "titulo", "descricao", "valor", "tipo", "banco"]
+    ie.juntar([dict(zip(campos, x.split("|"), strict=True)) for x in linhas])
     gp.REGRAS_PESSOAIS.write_text(json.dumps({
         "voce_mesmo": ["ana exemplo"],
         "contas_proprias": {"31872495": {"nome": "C6", "recebido": "Comissão"}},

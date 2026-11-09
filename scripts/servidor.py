@@ -26,6 +26,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import base_dados  # noqa: E402
+
 import gerar_painel  # noqa: E402
 import radar_b3  # noqa: E402
 import sincronizar_pluggy  # noqa: E402
@@ -82,6 +84,17 @@ def analisar(ticker):
     if r.returncode != 0 or not novos:
         raise RuntimeError(f"a análise não gerou relatório (veja dados/relatorios/.log-{ticker}.txt)")
     return novos[-1].name
+
+
+def salvar_categoria(desc, categoria):
+    """Confirma uma categoria vinda de "Revisar Outros": grava a regra privada e refaz o painel."""
+    regras = json.loads(gerar_painel.REGRAS_PESSOAIS.read_text(encoding="utf-8")) if gerar_painel.REGRAS_PESSOAIS.exists() else {}
+    regras.setdefault("destinos", {})[desc.lower()] = categoria
+    temporario = gerar_painel.REGRAS_PESSOAIS.with_suffix(".tmp")
+    temporario.write_text(json.dumps(regras, ensure_ascii=False, indent=2), encoding="utf-8")
+    temporario.replace(gerar_painel.REGRAS_PESSOAIS)
+    base_dados.registrar_regra("destino", desc.lower(), "revisao")
+    gerar_painel.main()
 
 
 def relatorios():
@@ -168,6 +181,15 @@ class Painel(BaseHTTPRequestHandler):
             return self.responder(200, {"ok": True, "mensagem": next((l for l in msg.splitlines() if l.startswith("Radar B3")), "")})
         if self.path == "/api/radar/remover":
             rodar(lambda: (radar_b3.main(["--remover", ticker]), radar_b3.main([]), gerar_painel.main()))
+            return self.responder(200, {"ok": True})
+        if self.path == "/api/categoria":
+            desc, categoria = str(corpo.get("descricao", "")), str(corpo.get("categoria", ""))
+            tx = json.loads(gerar_painel.SAIDA_JSON.read_text(encoding="utf-8"))
+            # só aceita o que o painel oferece: uma descrição que está em "Outros" e uma categoria que já existe
+            validas = {t[2] for t in tx if t[3] == "saida"} - {"Outros"}
+            if not any(t[1] == desc and t[2] == "Outros" for t in tx) or categoria not in validas:
+                return self.responder(400, {"erro": "Descrição ou categoria inválida."})
+            rodar(salvar_categoria, desc, categoria)
             return self.responder(200, {"ok": True})
         if self.path == "/api/analisar":
             iniciou = em_segundo_plano(f"analise:{ticker}", lambda: analisar(ticker))

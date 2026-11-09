@@ -26,11 +26,11 @@ def test_separa_titulo_e_descricao():
 
 
 def test_hifen_no_nome_da_loja_e_mantido():
-    assert s.para_linha(tx("Compra no débito - Rmix - Ondina"))["descricao"] == "Rmix - Ondina"
+    assert s.para_linha(tx("Compra no débito - Loja - Centro"))["descricao"] == "Loja - Centro"
 
 
 def test_espacos_repetidos_sao_removidos():
-    assert s.para_linha(tx("Compra no débito - Ingo Mark     Salvador  Bra"))["descricao"] == "Ingo Mark Salvador Bra"
+    assert s.para_linha(tx("Compra no débito - Loja Aurora     Salvador  Bra"))["descricao"] == "Loja Aurora Salvador Bra"
 
 
 def test_tipo_da_compra():
@@ -458,3 +458,62 @@ def test_sync_nao_roda_duas_vezes_ao_mesmo_tempo(sync, capsys):
     trava.close()
     assert sync == []
     assert "cancelada" in capsys.readouterr().out
+
+
+def aplicacao(tipo="CDB", valor=110.0, aplicado=100.0, liquido=108.0, venc="2027-07-30T03:00:00.000Z", ir=2.0, taxa=102):
+    return {"type": "FIXED_INCOME", "subtype": tipo, "name": f"{tipo} - BANCO", "amount": valor, "amountOriginal": aplicado, "balance": liquido,
+            "taxes": ir, "taxes2": 0, "dueDate": venc, "rate": taxa, "rateType": "CDI", "status": "ACTIVE"}
+
+
+FUNDO = {"type": "MUTUAL_FUND", "subtype": "MULTIMARKET_FUND", "name": "Fator Macro FIC FIM", "amount": 155.0, "amountOriginal": None,
+         "balance": 154.0, "taxes": 1.0, "taxes2": 0, "status": "ACTIVE"}
+
+
+def inter_base():
+    gp.INTER_INV.write_text(json.dumps({
+        "total": 1, "atualizado_em": "2026-10-28", "mensal": [{"mes": "2026-10", "valor": 1}],
+        "posicoes": [{"produto": "Fundo Fator Macro (multimercado)", "aplicado": 150.0}]}), encoding="utf-8")
+
+
+def inter_salvo():
+    return json.loads(gp.INTER_INV.read_text(encoding="utf-8"))
+
+
+def test_inter_soma_as_aplicacoes_do_mesmo_produto(monkeypatch):
+    hoje(monkeypatch, 2026, 11, 8)
+    inter_base()
+    s.atualizar_inter([aplicacao(), aplicacao(valor=220, aplicado=200, liquido=216, venc="2028-09-04T03:00:00.000Z", ir=4)])
+    i = inter_salvo()
+    assert len(i["posicoes"]) == 1
+    p = i["posicoes"][0]
+    assert (p["valor"], p["aplicado"], p["liquido"], p["impostos"]) == (330, 300, 324, 6)
+    assert p["info"] == "102% do CDI · 2 aplicações · vencimentos de 07/2027 a 09/2028"
+
+
+def test_inter_fundo_mantem_o_aplicado_conhecido(monkeypatch):
+    hoje(monkeypatch, 2026, 11, 8)
+    inter_base()
+    s.atualizar_inter([FUNDO])
+    p = inter_salvo()["posicoes"][0]
+    assert (p["produto"], p["aplicado"], p["classe"]) == ("Fundo Fator Macro", 150, "Fundos")
+
+
+def test_inter_guarda_o_valor_do_mes_sem_duplicar(monkeypatch):
+    hoje(monkeypatch, 2026, 11, 8)
+    inter_base()
+    s.atualizar_inter([aplicacao()])
+    s.atualizar_inter([aplicacao(valor=111)])
+    i = inter_salvo()
+    assert i["mensal"] == [{"mes": "2026-10", "valor": 1}, {"mes": "2026-11", "valor": 111}]
+    assert i["total"] == 111
+
+
+def test_inter_sem_posicoes_nao_apaga_o_que_existe():
+    inter_base()
+    s.atualizar_inter([])
+    assert inter_salvo()["total"] == 1
+
+
+def test_valor_grande_nao_perde_centavos():
+    """O formato anterior cortava em 6 dígitos significativos: 12345.67 virava 12345.7."""
+    assert s.para_linha(tx(valor=-12345.67))["valor"] == "-12345.67"

@@ -221,3 +221,39 @@ def test_lista_de_relatorios_mais_recentes_primeiro():
     for nome in ("ANALISE-PETR4-2026-01-01.md", "ANALISE-BBAS3-2026-03-01.md", "rascunho.md"):
         (s.RELATORIOS / nome).write_text("x", encoding="utf-8")
     assert [r["ticker"] for r in s.relatorios()] == ["BBAS3", "PETR4"]
+
+
+@pytest.fixture
+def tx_salvas(api):
+    linhas = [["2026-01-01", "Loja Y", "Outros", "saida", 10, "Compra", "Inter", ""], ["2026-01-01", "Mercado", "Mercado", "saida", 5, "Compra", "Inter", ""]]
+    s.gerar_painel.SAIDA_JSON.write_text(json.dumps(linhas), encoding="utf-8")
+    return api
+
+
+def test_confirmar_categoria_grava_regra_e_refaz_o_painel(tx_salvas, monkeypatch):
+    gerados = []
+    monkeypatch.setattr(s.gerar_painel, "main", lambda: gerados.append(1))
+    s.gerar_painel.REGRAS_PESSOAIS.write_text(json.dumps({"voce_mesmo": ["ana"], "destinos": {"x": "Lazer"}}), encoding="utf-8")
+    assert tx_salvas("POST", "/api/categoria", {"descricao": "Loja Y", "categoria": "Mercado"})[0] == 200
+    regras = json.loads(s.gerar_painel.REGRAS_PESSOAIS.read_text(encoding="utf-8"))
+    assert regras == {"voce_mesmo": ["ana"], "destinos": {"x": "Lazer", "loja y": "Mercado"}}
+    assert gerados == [1]
+    assert s.base_dados.regras_conhecidas()[("destino", "loja y")]["origem"] == "revisao"
+
+
+@pytest.mark.parametrize("corpo", [
+    {"descricao": "Loja Y", "categoria": "Inventada"},
+    {"descricao": "Loja Y", "categoria": "Outros"},
+    {"descricao": "Mercado", "categoria": "Mercado"},  # não está em "Outros"
+    {"descricao": "Nao Existe", "categoria": "Mercado"},
+    {},
+])
+def test_categoria_invalida_nao_altera_as_regras(tx_salvas, corpo):
+    assert tx_salvas("POST", "/api/categoria", corpo)[0] == 400
+    assert not s.gerar_painel.REGRAS_PESSOAIS.exists()
+
+
+def test_categoria_de_fora_e_recusada(tx_salvas):
+    corpo = {"descricao": "Loja Y", "categoria": "Mercado"}
+    assert tx_salvas("POST", "/api/categoria", corpo, {"Origin": "https://site-qualquer.com"})[0] == 403
+    assert not s.gerar_painel.REGRAS_PESSOAIS.exists()

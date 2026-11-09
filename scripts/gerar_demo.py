@@ -92,11 +92,11 @@ def transacoes(linhas, envios_xp):
     conc = {"envio": Counter((d, round(v, 2)) for d, v in envios_xp), "retorno": Counter()}
     tx = []
     for d, titulo, desc, v in linhas:
-        tipo, cat = gp.classificar(d, titulo, desc, v, cats, destinos, origens, [EU.lower()], conc)
+        tipo, cat, regra = gp.classificar(d, titulo, desc, v, cats, destinos, origens, [EU.lower()], conc)
         prod = gp.produto(tipo, cat, desc)
         if prod:
             cat = "Investimentos"
-        tx.append([d, desc, cat, tipo, round(abs(v), 2), titulo, "Inter", prod])
+        tx.append([d, desc, cat, tipo, round(abs(v), 2), titulo, "Inter", prod, gp.motivo(regra)])
     return tx
 
 
@@ -212,13 +212,14 @@ def main():
     tx = transacoes(linhas, envios)
     ind = indices()
     dados_xp = xp(meses, envios, ind)
-    html = (gp.BASE.read_text(encoding="utf-8")
+    html = (gp.montar_pagina()
             .replace("/*__DADOS__*/[]", json.dumps(tx, ensure_ascii=False))
             .replace("/*__XP__*/null", json.dumps(dados_xp, ensure_ascii=False))
             .replace("/*__INTERINV__*/null", json.dumps(inter_invest(tx, meses), ensure_ascii=False))
             .replace("/*__SYNC__*/null", json.dumps(datetime.now().astimezone().isoformat(timespec="seconds")))
             .replace("/*__INDICES__*/null", json.dumps(gp.resumo_indices(ind)))
             .replace("/*__RADAR__*/null", json.dumps(radar(dados_xp, ind), ensure_ascii=False))
+            .replace("/*__REVISAR__*/[]", "[]")
             .replace("/*__DEMO__*/false", "true"))
     SAIDA.parent.mkdir(exist_ok=True)
     SAIDA.write_text(html, encoding="utf-8")
