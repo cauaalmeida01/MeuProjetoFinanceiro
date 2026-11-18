@@ -101,3 +101,25 @@ def test_rendimento_mensal_do_inter_desconta_aplicacoes():
     assert r["mensal"][1]["aportes_liquidos"] == 100
     assert r["mensal"][1]["rendimento"] == 10  # 1110 - 1000 - 100; o envio para a XP não entra
     assert "_fonte" not in r
+
+
+def test_caixa_refaz_o_saldo_do_inter_pelo_extrato():
+    linhas = [{"data": "2026-01-05", "valor": 1000.0}, {"data": "2026-01-20", "valor": -300.0},
+              {"data": "2026-03-02", "valor": -200.0}, {"data": "2026-03-03", "valor": 50.0}]
+    tipos = ["entrada", "aporte", "transf", "saida"]
+    tx = [["2026-01-20", "Prot.1 Prefixado 2029", "Investimentos", "aporte", 300.0, "Debito Online Td", "Inter", "Tesouro Prefixado 2029", ""],
+          ["2026-01-21", "CDB", "Investimentos", "aporte", 80.0, "Aplicação", "Inter", "CDB", ""]]
+    gp.PLUGGY.write_text(json.dumps({"saldos": {"inter": 550.0, "xp": 10.0}}), encoding="utf-8")
+    r = gp.carregar_caixa(linhas, tipos, tx)
+    # o mês sem lançamento (fevereiro) repete o saldo; o último mês fecha com o saldo do banco
+    assert r["saldo_mes"]["2026-01"] == 700.0 and r["saldo_mes"]["2026-02"] == 700.0 and r["saldo_mes"]["2026-03"] == 550.0
+    assert r["entre_contas"] == {"2026-03": -200.0}
+    assert (r["inter"], r["xp"]) == (550.0, 10.0)
+    assert r["fora"] == [{"produto": "Tesouro Prefixado 2029", "aplicado": 300.0}]
+
+
+def test_tesouro_e_cripto_nao_entram_no_rendimento_do_inter():
+    gp.INTER_INV.write_text(json.dumps({"total": 1000, "posicoes": [],
+                                        "mensal": [{"mes": "2026-10", "valor": 1000}, {"mes": "2026-11", "valor": 1010}]}), encoding="utf-8")
+    tx = [["2026-11-18", "Prot.1 Prefixado 2029", "Investimentos", "aporte", 239.02, "Debito Online Td", "Inter", "Tesouro Prefixado 2029", ""]]
+    assert gp.carregar_inter_inv(tx)["mensal"][-1]["rendimento"] == 10

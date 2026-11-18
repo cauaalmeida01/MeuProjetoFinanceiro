@@ -36,6 +36,9 @@ APORTE = {"Aplicação", "Aplicação em fundos"}
 RESGATE = {"Resgate", "Resgate de fundo", "Vencimento Renda Fixa"}
 DEVOLUCAO_ENTRADA = {"Estorno", "Pix enviado devolvido"}
 DEVOLUCAO_SAIDA = {"Pix recebido devolvido"}
+# investimentos feitos pelo app do Inter que a Pluggy não lista como posição (Tesouro Direto e cripto)
+TESOURO = {"Debito Online Td": "aporte", "Credito Online Td": "resgate"}
+CRIPTO = {"Compra": "aporte", "Venda": "resgate"}
 
 # nomes legíveis para os produtos de investimento que aparecem no extrato do Inter
 PRODUTOS_INTER = [
@@ -52,8 +55,17 @@ def produto(tipo, cat, desc):
         return ""
     if cat == "XP":
         return "XP"
+    if cat == "Tesouro Direto":  # "Prot.110503854 Prefixado 2029" → "Tesouro Prefixado 2029"
+        return "Tesouro " + (re.sub(r"^prot\.?\s*\d*\s*", "", desc, flags=re.I).strip() or "Direto")
+    if cat == "Cripto":
+        return "Criptomoedas (Inter)"
     d = desc.lower()
     return next((nome for trecho, nome in PRODUTOS_INTER if trecho in d), desc)
+
+
+def fora_da_pluggy(prod):
+    """Produto comprado pelo Inter que não aparece nas posições da Pluggy (fica a preço de custo)."""
+    return prod.startswith("Tesouro ") or prod.startswith("Criptomoedas")
 
 
 def montar_pagina():
@@ -119,7 +131,7 @@ def carregar_inter_inv(tx):
     inv = json.loads(INTER_INV.read_text(encoding="utf-8"))
     fluxo = defaultdict(float)
     for t in tx:
-        if t[2] == "Investimentos" and t[7] != "XP":
+        if t[2] == "Investimentos" and t[7] != "XP" and not fora_da_pluggy(t[7]):
             fluxo[t[0][:7]] += t[4] if t[3] == "aporte" else -t[4]
     ant = None
     for m in inv["mensal"]:
@@ -205,6 +217,36 @@ def resumo_indices(ind):
             "cdi_ate": ultimo_cdi, "ipca_ate": ipca[-1][0]}
 
 
+def carregar_caixa(linhas, tipos, tx):
+    """Dinheiro parado nas contas e o saldo da conta do Inter no fim de cada mês, refeito pelo extrato.
+
+    O extrato do Inter vem completo desde a abertura da conta, então a soma de todos os lançamentos
+    tem que dar o saldo que o banco informa: é a prova de que nada ficou de fora.
+    "entre_contas" é o saldo, com sinal, das movimentações neutras do mês (Pix entre contas suas etc.).
+    """
+    mov, entre = defaultdict(float), defaultdict(float)
+    for l, tipo in zip(linhas, tipos, strict=True):
+        mov[l["data"][:7]] += l["valor"]
+        if tipo == "transf":
+            entre[l["data"][:7]] += l["valor"]
+    saldo_mes, acum = {}, 0.0
+    if mov:
+        a, m = map(int, min(mov).split("-"))
+        fim = max(max(mov), date.today().strftime("%Y-%m"))
+        while (k := f"{a}-{m:02d}") <= fim:
+            acum += mov[k]
+            saldo_mes[k] = round(acum, 2)
+            a, m = (a + 1, 1) if m == 12 else (a, m + 1)
+    fora = defaultdict(float)
+    for t in tx:
+        if fora_da_pluggy(t[7]):
+            fora[t[7]] += t[4] if t[3] == "aporte" else -t[4]
+    saldos = json.loads(PLUGGY.read_text(encoding="utf-8")).get("saldos", {}) if PLUGGY.exists() else {}
+    return {"inter": saldos.get("inter"), "xp": saldos.get("xp"), "em": saldos.get("em"),
+            "saldo_mes": saldo_mes, "entre_contas": {k: round(v, 2) for k, v in entre.items() if v},
+            "fora": [{"produto": k, "aplicado": round(v, 2)} for k, v in sorted(fora.items()) if round(v, 2) > 0]}
+
+
 def ultima_sincronizacao():
     """Data e hora da última sincronização com a Pluggy, gravada por sincronizar_pluggy.py."""
     if not PLUGGY.exists():
@@ -269,6 +311,10 @@ def classificar(data, titulo, desc, valor, cats, destinos, origens, eu, conc, ba
         return Resultado("aporte", "Inter", ("operacao", titulo))
     if titulo in RESGATE:
         return Resultado("resgate", "Inter", ("operacao", titulo))
+    if titulo in TESOURO:
+        return Resultado(TESOURO[titulo], "Tesouro Direto", ("operacao", titulo))
+    if titulo in CRIPTO and "cripto" in d:
+        return Resultado(CRIPTO[titulo], "Cripto", ("operacao", titulo))
     r = neutro(data, titulo, desc, banco or "", neutros)
     if r:
         return Resultado("transf", r["categoria"], ("neutra", r["descricao"].lower()))
@@ -341,7 +387,7 @@ def main():
     proprias = carregar_contas_proprias()
     neutros = carregar_neutros()
     linhas = importar_extrato.ler_historico()
-    tx, resultados = [], []
+    tx, resultados, tipos = [], [], []
     for l in linhas:
         v = l["valor"]
         desc = l["descricao"].strip() or l["titulo"]
@@ -351,11 +397,13 @@ def main():
         if prod:
             cat = "Investimentos"
         resultados.append((l["id"], tipo, cat, regra))
+        tipos.append(tipo)
         tx.append([l["data"], desc, cat, tipo, round(abs(v), 2), l["titulo"], "Inter", prod, regra])
     base_dados.registrar_classificacoes(resultados)
     conhecidas = base_dados.regras_conhecidas()
     for t in tx:
         t[8] = motivo(t[8], conhecidas)
+    caixa = carregar_caixa(linhas, tipos, tx)
     tx = sorted(tx + carregar_ajustes(), key=lambda t: t[0])
 
     SAIDA_JSON.write_text(json.dumps(tx, ensure_ascii=False), encoding="utf-8")
@@ -368,6 +416,7 @@ def main():
             .replace("/*__XP__*/null", json.dumps(xp_painel, ensure_ascii=False))
             .replace("/*__INTERINV__*/null", json.dumps(carregar_inter_inv(tx), ensure_ascii=False))
             .replace("/*__SYNC__*/null", json.dumps(ultima_sincronizacao()))
+            .replace("/*__CAIXA__*/null", json.dumps(caixa, ensure_ascii=False))
             .replace("/*__INDICES__*/null", json.dumps(resumo_indices(ind)))
             .replace("/*__RADAR__*/null", RADAR.read_text(encoding="utf-8") if RADAR.exists() else "null")
             .replace("/*__REVISAR__*/[]", json.dumps(sugerir_categorias.revisar(tx, parece_pessoa), ensure_ascii=False)))

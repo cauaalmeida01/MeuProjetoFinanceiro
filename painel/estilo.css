@@ -80,6 +80,17 @@ main{padding-block:22px 48px;display:grid;gap:22px}
 .delta.good{color:var(--in)} .delta.bad{color:var(--out)}
 .kpi.lead{background:var(--accent-soft);border-color:transparent}
 .kpi.lead .val{color:var(--accent)}
+.kpi .sub.ok{color:var(--in)} .kpi .sub.bad{color:var(--warn)}
+/* da sobra ao saldo do Inter */
+.conc{margin-top:12px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:12px 16px;display:grid;gap:8px}
+.conc[hidden]{display:none}
+.conc-h{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:baseline;font-size:.85rem}
+.conc-h span{color:var(--muted)}
+.conc-r{display:flex;flex-wrap:wrap;gap:8px 22px}
+.ct{display:grid;gap:1px;cursor:help}
+.ct small{font-size:.72rem;color:var(--muted)}
+.ct b{font-family:var(--f-mono);font-weight:500}
+.ct.eq{padding-left:16px;border-left:2px solid var(--line)}
 
 .grid2{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:22px}
 .grid2b{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.5fr);gap:22px}
@@ -237,3 +248,41 @@ dialog.rel::backdrop{background:rgb(0 0 0 / .45)}
 [hidden]{display:none!important}
 .seg.tabs button{padding:7px 16px;font-size:.88rem}
 .pill[title]:not([title=""]){cursor:help}
+
+/* ---------- investimentos: carteira consolidada ---------- */
+.sub-tabs{display:inline-flex;margin-bottom:16px}
+.sub-tabs button{padding:6px 14px;font-size:.85rem}
+.hero{display:grid;grid-template-columns:1.4fr repeat(4,minmax(0,1fr));gap:12px}
+@media (max-width:1100px){.hero{grid-template-columns:repeat(2,minmax(0,1fr))}.hero .lead{grid-column:1/-1}}
+@media (max-width:520px){.hero{grid-template-columns:minmax(0,1fr)}}
+.hc{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px 18px;display:grid;gap:4px;align-content:start;min-width:0}
+.hc .val{font-family:var(--f-mono);font-variant-numeric:tabular-nums;font-size:1.35rem;font-weight:500;letter-spacing:-.02em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hc .sub{font-size:.8rem;color:var(--muted)}
+.hc .sub b{font-weight:600}
+.hc.lead{background:var(--accent-soft);border-color:transparent}
+.hc.lead .val{font-size:2.2rem;color:var(--accent)}
+.hc.best .val,.hc.worst .val{font-family:var(--f-body);font-weight:600;font-size:1.2rem}
+.aloc{display:grid;grid-template-columns:minmax(0,200px) minmax(0,1fr);gap:18px;align-items:center}
+@media (max-width:520px){.aloc{grid-template-columns:minmax(0,1fr)}}
+.aloc-c.chart{height:200px}
+.aloc-l{display:grid;gap:4px}
+.al{display:grid;grid-template-columns:10px minmax(0,1fr) auto;gap:2px 10px;align-items:center;background:none;border:0;border-radius:8px;padding:6px 8px;text-align:left;color:inherit;font:inherit;cursor:pointer}
+.al:hover{background:var(--surface-2)}
+.al.off{opacity:.4}
+.al i{width:10px;height:10px;border-radius:3px;grid-row:1/3}
+.al span{font-size:.88rem;font-weight:500}
+.al b{font-family:var(--f-mono);font-weight:500;font-size:.88rem}
+.al small{grid-column:2/-1;font-size:.76rem;color:var(--muted)}
+.ativos-ctl{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+table.ativos td{vertical-align:middle}
+.at-n{font-weight:500}
+.at-i,.at-p{font-size:.76rem;color:var(--muted)}
+.at-p{color:inherit;opacity:.85}
+.onde{font-size:.68rem;font-weight:600;letter-spacing:.04em;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:0 6px;margin-left:4px;vertical-align:1px}
+.cl-dot{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:6px}
+.peso{display:grid;grid-template-columns:auto 70px;gap:8px;align-items:center;justify-content:end}
+.pb{height:5px;border-radius:3px;background:var(--surface-2);overflow:hidden}
+.pb span{display:block;height:100%}
+#tab-inv,#tab-geral,[data-sub]{min-width:0}
+[data-sub]{display:grid;gap:22px;grid-template-columns:minmax(0,1fr)}
+[data-sub][hidden]{display:none}

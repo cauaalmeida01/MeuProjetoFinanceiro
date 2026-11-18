@@ -219,6 +219,7 @@ def main():
             .replace("/*__SYNC__*/null", json.dumps(datetime.now().astimezone().isoformat(timespec="seconds")))
             .replace("/*__INDICES__*/null", json.dumps(gp.resumo_indices(ind)))
             .replace("/*__RADAR__*/null", json.dumps(radar(dados_xp, ind), ensure_ascii=False))
+            .replace("/*__CAIXA__*/null", "null")
             .replace("/*__REVISAR__*/[]", "[]")
             .replace("/*__DEMO__*/false", "true"))
     SAIDA.parent.mkdir(exist_ok=True)

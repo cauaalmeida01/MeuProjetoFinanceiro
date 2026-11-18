@@ -322,6 +322,7 @@ def main():
     pluggy = Pluggy(env["PLUGGY_CLIENT_ID"], env["PLUGGY_CLIENT_SECRET"])
     eu = gerar_painel.carregar_regras()[3]
     linhas, investimentos, falhas = [], [], 0
+    saldos = {}  # dinheiro parado na conta corrente de cada banco, para o card "Caixa agora"
     item_ids = [i.strip() for i in env["PLUGGY_ITEM_IDS"].split(",") if i.strip()]
     for item_id in item_ids:
         # um banco com problema não impede de salvar o outro
@@ -333,6 +334,10 @@ def main():
             if item["status"] != "UPDATED":
                 print(f"  Atenção: {item.get('statusDetail') or item.get('error')}")
             for c in contas:
+                if c["type"] == "BANK":
+                    banco = "inter" if "INTER" in c["name"].upper() else "xp" if c["name"].upper().startswith("XP") else None
+                    if banco:
+                        saldos[banco] = round(saldos.get(banco, 0) + (c.get("balance") or 0), 2)
                 if c["type"] == "BANK" and "INTER" in c["name"].upper():
                     tx = pluggy.transacoes(c["id"])
                     linhas += [para_linha(t) for t in tx if t.get("status") == "POSTED"]
@@ -354,6 +359,7 @@ def main():
 
     INVESTIMENTOS.write_text(json.dumps({"atualizado_em": date.today().isoformat(),
                                          "sincronizado_em": datetime.now(FUSO).isoformat(timespec="seconds"),
+                                         "saldos": {**saldos, "em": datetime.now(FUSO).isoformat(timespec="seconds")},
                                          "posicoes": investimentos},
                                         ensure_ascii=False, indent=1), encoding="utf-8")
     if linhas:

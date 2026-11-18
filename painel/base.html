@@ -55,6 +55,7 @@
 <main class="wrap">
 <div id="tab-geral" role="tabpanel">
   <section class="kpis" id="kpis" aria-label="Resumo do período"></section>
+  <section class="conc" id="conc" aria-label="Da sobra ao saldo do Inter" hidden></section>
 
   <div class="grid2">
     <section class="panel">
@@ -142,34 +143,62 @@
 </div>
 
 <div id="tab-inv" role="tabpanel" hidden>
-    <section class="panel">
-      <div class="panel-head">
-        <h2 id="t-inv">Quanto você investiu por mês</h2>
-        <div class="legend">
-          <span><i style="background:color-mix(in srgb,var(--inv) 40%,transparent)"></i>CDB e fundos Inter</span>
-          <span><i style="background:color-mix(in srgb,var(--accent) 55%,transparent)"></i>Envios para XP</span>
-          <span><i style="background:color-mix(in srgb,var(--warn) 55%,transparent)"></i>Resgates</span>
-        </div>
-      </div>
-      <div class="chart"><canvas id="c-flux" aria-label="Aplicações no Inter, envios para a XP e resgates por mês"></canvas></div>
-      <p class="note" id="flux-note"></p>
-    </section>
+  <div class="seg sub-tabs" id="inv-sub" role="tablist" aria-label="Partes da aba Investimentos">
+    <button type="button" role="tab" data-v="carteira">Carteira</button>
+    <button type="button" role="tab" data-v="inter">Inter</button>
+    <button type="button" role="tab" data-v="xp">XP</button>
+    <button type="button" role="tab" data-v="radar">Radar B3</button>
+  </div>
 
-  <section class="panel" id="inv-sec">
+<div data-sub="carteira">
+  <section class="hero" id="inv-hero" aria-label="Resumo da carteira"></section>
+
+  <div class="grid2b">
+    <section class="panel">
+      <div class="panel-head"><h2>Onde está seu dinheiro</h2><span class="hint">Clique numa classe para filtrar os ativos</span></div>
+      <div class="aloc">
+        <div class="chart aloc-c"><canvas id="c-aloc" aria-label="Divisão da carteira por classe de ativo"></canvas></div>
+        <div class="aloc-l" id="aloc-l"></div>
+      </div>
+    </section>
+    <section class="panel">
+      <div class="panel-head"><h2>Patrimônio investido mês a mês</h2><span class="hint">Inter e XP somados</span></div>
+      <div class="chart"><canvas id="c-total" aria-label="Patrimônio investido somado por mês"></canvas></div>
+    </section>
+  </div>
+
+  <section class="panel">
     <div class="panel-head">
-      <h2>Seus investimentos</h2>
-      <span class="hint" id="inv-ref"></span>
-    </div>
-    <div class="xp-stats" id="inv-stats"></div>
-    <div class="panel-head sub-head" style="margin-top:18px"><h3>Patrimônio investido mês a mês</h3>
-      <div class="legend">
-        <span><i style="background:color-mix(in srgb,var(--p6) 75%,transparent)"></i>Inter</span>
-        <span><i style="background:color-mix(in srgb,var(--inv) 75%,transparent)"></i>XP</span>
+      <h2 id="t-ativos">Seus ativos</h2>
+      <div class="ativos-ctl">
+        <button class="btn" type="button" id="ativos-limpar" hidden>Mostrar todas as classes</button>
+        <label class="hint" for="ativos-ordem">Ordenar por</label>
+        <select id="ativos-ordem">
+          <option value="valor">Valor hoje</option>
+          <option value="pct">Rentabilidade (%)</option>
+          <option value="ganho">Ganho (R$)</option>
+          <option value="nome">Nome</option>
+        </select>
       </div>
     </div>
-    <div class="chart"><canvas id="c-total" aria-label="Patrimônio investido no Inter e na XP por mês"></canvas></div>
+    <div class="tbl-wrap"><table class="ativos" id="ativos"></table></div>
+    <p class="note" id="ativos-note"></p>
   </section>
 
+  <section class="panel">
+    <div class="panel-head">
+      <h2 id="t-inv">Quanto você investiu por mês</h2>
+      <div class="legend">
+        <span><i style="background:color-mix(in srgb,var(--inv) 60%,transparent)"></i>Aplicado</span>
+        <span><i style="background:color-mix(in srgb,var(--warn) 55%,transparent)"></i>Resgatado</span>
+      </div>
+    </div>
+    <div class="chart"><canvas id="c-flux" aria-label="Aplicações e resgates por mês"></canvas></div>
+    <p class="note" id="flux-note"></p>
+  </section>
+</div>
+
+<div data-sub="inter">
   <section class="panel" id="inter-sec">
     <div class="panel-head">
       <h2>Investimentos no Inter</h2>
@@ -189,6 +218,9 @@
     <p class="note" id="inter-note"></p>
   </section>
 
+</div>
+
+<div data-sub="xp">
   <section class="panel" id="xp-sec">
     <div class="panel-head">
       <h2>Investimentos na XP</h2>
@@ -229,6 +261,9 @@
     <p class="note" id="inv-note"></p>
   </section>
 
+</div>
+
+<div data-sub="radar">
   <section class="panel" id="radar-sec" hidden>
     <div class="panel-head">
       <h2>Radar B3</h2>
@@ -254,6 +289,7 @@
     </div>
     <p class="note" id="radar-note"></p>
   </section>
+</div>
 </div>
   <dialog class="rel" id="rel-dlg" aria-labelledby="rel-title">
     <div class="rel-head"><b id="rel-title"></b><button class="btn" type="button" id="rel-close">Fechar</button></div>

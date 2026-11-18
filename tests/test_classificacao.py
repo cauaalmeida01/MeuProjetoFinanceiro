@@ -198,3 +198,19 @@ def test_motivo_em_portugues(regra, texto):
 def test_motivo_de_regra_confirmada_mostra_a_data():
     conhecidas = {("destino", "loja"): {"origem": "revisao", "criada_em": "2026-11-08T21:00:00-03:00"}}
     assert motivo(("destino", "loja"), conhecidas) == "Você confirmou esta categoria em 08/11/2026"
+
+
+def test_tesouro_direto_comprado_pelo_inter_e_aporte():
+    assert c("Debito Online Td", "Prot.110503854 Prefixado 2029", -239.02) == ("aporte", "Tesouro Direto")
+    assert c("Credito Online Td", "Prot.110503854 Prefixado 2029", 239.02) == ("resgate", "Tesouro Direto")
+    assert produto("aporte", "Tesouro Direto", "Prot.110503854 Prefixado 2029") == "Tesouro Prefixado 2029"
+
+
+def test_cripto_comprada_pelo_inter_e_aporte():
+    assert c("Compra", "Criptomoedas", -200) == ("aporte", "Cripto")
+    assert c("Venda", "Criptomoedas", 150) == ("resgate", "Cripto")
+    assert produto("aporte", "Cripto", "Criptomoedas") == "Criptomoedas (Inter)"
+
+
+def test_compra_comum_continua_gasto():
+    assert c("Compra", "Loja Exemplo", -50)[0] == "saida"

@@ -3,6 +3,7 @@ const RAW=/*__DADOS__*/[];
 const XP=/*__XP__*/null;
 const INV=/*__INTERINV__*/null;
 const SYNC=/*__SYNC__*/null;
+const CAIXA=/*__CAIXA__*/null;  // saldos das contas e saldo do Inter mês a mês, refeito pelo extrato
 const IND=/*__INDICES__*/null;
 const RADAR=/*__RADAR__*/null;
 const REVISAR=/*__REVISAR__*/[];
@@ -34,6 +35,9 @@ const lastMonth=y=>Math.max(...monthsOf[y]);
 const monthRange=y=>{const a=[];for(let m=firstMonth(y);m<=lastMonth(y);m++)a.push(m);return a};
 const cats=[...new Set(tx.filter(t=>t.type==='saida'||t.cat==='Investimentos').map(t=>t.cat))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
 const isXP=t=>t.prod==='XP';
+const FORA=(CAIXA&&CAIXA.fora)||[];  // Tesouro Direto e cripto comprados pelo Inter: a Pluggy não lista a posição
+const isFora=t=>FORA.some(f=>f.produto===t.prod);
+const foraTotal=()=>FORA.reduce((x,f)=>x+f.aplicado,0);
 const isDelivery=t=>/ifood|ifd\*|99 ?food/i.test(t.desc);
 
 /* ---------- estado ---------- */
@@ -101,7 +105,41 @@ function drawKpis(){
     <div class="kpi"><span class="eyebrow">Saídas</span><span class="val">${fmt(s.out)}</span><span class="sub">${delta(s.out,ps&&ps.out,false,p&&p.label)||periodLabel()}</span></div>
     <div class="kpi lead"><span class="eyebrow">Sobra do período</span><span class="val">${fmt(sobra)}</span><span class="sub">${s.in?(sobra>=0?'Você guardou '+pct(taxa)+' do que entrou':'Saiu '+pct(-taxa)+' a mais do que entrou'):'Sem entradas no filtro'}</span></div>
     <div class="kpi"><span class="eyebrow">Investido em ${S.year}</span><span class="val">${fmt(ano.inv)}</span><span class="sub">${fmt(invA.inter)} no Inter + ${fmt(invA.xp)} na XP${ano.res?' · resgatou '+fmt(ano.res):''}</span></div>
-    <div class="kpi"><span class="eyebrow">Patrimônio investido</span><span class="val">${fmt(invTotal())}</span><span class="sub">${INV?'Inter '+fmt(INV.total):''}${INV&&XP?' + ':''}${XP?'XP '+fmt(XP.patrimonio):''}</span></div>`;
+    <div class="kpi"><span class="eyebrow">Patrimônio investido</span><span class="val">${fmt(invTotal())}</span><span class="sub">${INV?'Inter '+fmt(INV.total):''}${INV&&XP?' + ':''}${XP?'XP '+fmt(XP.patrimonio):''}${FORA.length?' + '+fmt(foraTotal())+' em Tesouro/cripto (custo)':''}</span></div>
+    ${caixaKpi()}`;
+  drawConciliacao();
+}
+function caixaKpi(){
+  if(!CAIXA||CAIXA.inter==null)return '';
+  const tot=CAIXA.inter+(CAIXA.xp||0),ks=Object.keys(CAIXA.saldo_mes).sort(),calc=CAIXA.saldo_mes[ks[ks.length-1]];
+  const ok=Math.abs(calc-CAIXA.inter)<0.01;
+  return `<div class="kpi"><span class="eyebrow">Caixa agora</span><span class="val">${fmt(tot)}</span><span class="sub">Inter ${fmt(CAIXA.inter)} + XP conta ${fmt(CAIXA.xp||0)}</span>
+    <span class="sub ${ok?'ok':'bad'}" title="Soma de todos os lançamentos do extrato do Inter desde a abertura da conta, comparada com o saldo que o banco informa">${ok?'✓ extrato do Inter bate com o saldo':'⚠ extrato dá '+fmt(calc)+', diferença '+fmt(CAIXA.inter-calc)}</span></div>`;
+}
+// Da sobra à variação do saldo do Inter: a sobra ignora investimentos e transferências, o caixa não
+function drawConciliacao(){
+  const el=$('conc');if(!el)return;
+  if(!CAIXA||!CAIXA.saldo_mes){el.hidden=true;return}
+  const k=(y,m)=>y+'-'+String(m+1).padStart(2,'0');
+  const ini=S.month==='all'?k(S.year,0):k(S.year,S.month),fim=S.month==='all'?k(S.year,11):ini;
+  const ks=Object.keys(CAIXA.saldo_mes).sort(),antes=ks.filter(x=>x<ini).pop(),ate=ks.filter(x=>x<=fim).pop();
+  if(!ate||ate<ini){el.hidden=true;return}
+  const s0=antes?CAIXA.saldo_mes[antes]:0,s1=CAIXA.saldo_mes[ate];
+  const list=base({cat:'all'}),aj=list.filter(t=>t.tit==='Ajuste manual');
+  const s=sums(list.filter(t=>t.tit!=='Ajuste manual'));
+  const ajL=aj.reduce((x,t)=>x+(t.type==='entrada'?t.v:t.type==='saida'?-t.v:0),0);
+  const entre=Object.entries(CAIXA.entre_contas).filter(([m])=>m>=ini&&m<=fim).reduce((x,[,v])=>x+v,0);
+  const sobra=s.in-s.out+ajL;
+  const termo=(l,v,dica)=>`<span class="ct" title="${esc(dica)}"><small>${l}</small><b class="num">${sgn(v)}</b></span>`;
+  const fimTxt=ate===ks[ks.length-1]&&CAIXA.inter!=null?'hoje':'no fim de '+mesAno(ate+'-01');
+  el.hidden=false;
+  el.innerHTML=`<div class="conc-h"><b>Da sobra ao saldo do Inter</b><span>${periodLabel()}: o saldo foi de ${fmt(s0)} para ${fmt(s1)} ${fimTxt}</span></div>
+   <div class="conc-r">${termo('Sobra do período',sobra,'Entradas − saídas (o card ao lado)')}
+   ${ajL?termo('− ajustes manuais',-ajL,'Lançamentos manuais que passaram fora do Inter (ex.: comissão recebida noutra conta)'):''}
+   ${termo('− investido',-s.inv,'Aplicações no Inter, Tesouro, cripto e Pix para a XP: saem do caixa, mas não são gasto')}
+   ${s.res?termo('+ resgatado',s.res,'Resgates e vencimentos que voltaram para a conta'):''}
+   ${entre?termo('± entre contas',entre,'Pix entre contas suas e movimentações marcadas como neutras'):''}
+   <span class="ct eq"><small>= variação do saldo</small><b class="num">${sgn(s1-s0)}</b></span></div>`;
 }
 
 /* ---------- gráficos ---------- */
@@ -149,25 +187,32 @@ function drawCharts(){
   charts.c=new Chart($('c-cat'),{type:'bar',data:{labels:ce.map(e=>e[0]),datasets:[{data:ce.map(e=>e[1]),backgroundColor:ce.map(e=>S.cat==='all'||S.cat===e[0]?colr(e[0]):alpha(colr(e[0]),.22)),borderRadius:3,maxBarThickness:18}]},options:o2});
   }
   // fluxo mensal para investimentos (lado do Inter)
-  const iv=ms.map(m=>{const l=base({month:m,cat:'all'}),s=sums(l),xp=l.filter(t=>isXP(t)&&t.type==='aporte').reduce((a,t)=>a+t.v,0);return {inter:s.inv-xp,xp,res:s.res}});
+  const iv=ms.map(m=>{const s=sums(base({month:m,cat:'all'}));return {inv:s.inv,res:s.res}});
   const o3=baseOpts();
   o3.scales.x.stacked=true;o3.scales.y.stacked=true;
   charts.f=new Chart($('c-flux'),{type:'bar',data:{labels:ms.map(m=>MES[m]),datasets:[
-    {label:'CDB e fundos Inter',data:iv.map(d=>d.inter),backgroundColor:alpha(cinv,.4),maxBarThickness:18},
-    {label:'Envios para XP',data:iv.map(d=>d.xp),backgroundColor:alpha(cacc,.55),maxBarThickness:18},
+    {label:'Aplicado',data:iv.map(d=>d.inv),backgroundColor:alpha(cinv,.6),maxBarThickness:18},
     {label:'Resgates',data:iv.map(d=>-d.res),backgroundColor:alpha(cwarn,.55),maxBarThickness:18}
   ]},options:o3});
-  // Inter + XP empilhados por mês
+  // patrimônio somado (Inter + XP) mês a mês; o detalhe por banco fica no tooltip
   if(INV||XP){
     const xpM={};if(XP){XP.mensal.forEach(r=>xpM[r.data.slice(0,7)]=r.final);xpM[XP.atualizado_em.slice(0,7)]=XP.patrimonio}
     const inM={};if(INV)INV.mensal.forEach(m=>inM[m.mes]=m.valor);
-    const ks=[...new Set([...Object.keys(xpM),...Object.keys(inM)])].sort();
-    const o6=baseOpts();o6.scales.x.stacked=true;o6.scales.y.stacked=true;o6.scales.x.ticks={maxRotation:0,autoSkip:true,maxTicksLimit:8};
-    o6.plugins.tooltip.mode='index';o6.plugins.tooltip.callbacks.footer=it=>'Total: '+fmt(it.reduce((x,c)=>x+c.parsed.y,0));
-    charts.t=new Chart($('c-total'),{type:'bar',data:{labels:ks.map(k=>mesAno(k+'-01')),datasets:[
-      {label:'Inter',data:ks.map(k=>inM[k]??0),backgroundColor:alpha(css('--p6'),.75),maxBarThickness:22},
-      {label:'XP',data:ks.map(k=>xpM[k]??0),backgroundColor:alpha(cinv,.75),maxBarThickness:22}
+    const ks=[...new Set([...Object.keys(xpM),...Object.keys(inM)])].sort(),ult=ks[ks.length-1];
+    const tot=k=>(inM[k]??0)+(xpM[k]??0)+(k===ult?foraTotal():0);
+    const o6=baseOpts();o6.scales.x.ticks={maxRotation:0,autoSkip:true,maxTicksLimit:8};o6.scales.y.beginAtZero=true;
+    o6.plugins.tooltip.callbacks.label=c=>' Total '+fmt(c.parsed.y);
+    o6.plugins.tooltip.callbacks.footer=it=>{const k=ks[it[0].dataIndex];return `Inter ${fmt(inM[k]??0)} · XP ${fmt(xpM[k]??0)}`+(k===ult&&FORA.length?` · Tesouro/cripto ${fmt(foraTotal())}`:'')};
+    charts.t=new Chart($('c-total'),{type:'line',data:{labels:ks.map(k=>mesAno(k+'-01')),datasets:[
+      {label:'Patrimônio',data:ks.map(tot),borderColor:cinv,backgroundColor:alpha(cinv,.12),fill:true,tension:.3,pointRadius:2,borderWidth:2}
     ]},options:o6});
+  }
+  if($('c-aloc')){
+    const ks2=classes(),o7=baseOpts();delete o7.scales;
+    o7.cutout='68%';o7.plugins.tooltip.callbacks.label=c=>` ${ks2[c.dataIndex].nome}: ${fmt(ks2[c.dataIndex].valor)} (${pct(ks2[c.dataIndex].peso)})`;
+    o7.onClick=(e,els)=>{if(!els.length)return;const n=ks2[els[0].index].nome;CLS=CLS===n?null:n;drawCarteira();drawCharts()};o7.onHover=pointer;
+    charts.a=new Chart($('c-aloc'),{type:'doughnut',data:{labels:ks2.map(c=>c.nome),datasets:[{data:ks2.map(c=>c.valor),
+      backgroundColor:ks2.map(c=>!CLS||CLS===c.nome?css(c.cor):alpha(css(c.cor),.2)),borderColor:css('--surface'),borderWidth:2}]},options:o7});
   }
   // XP: patrimônio, aportes e rendimento mês a mês
   if(XP){
@@ -344,10 +389,9 @@ $('top').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)r
 
 /* ---------- investimentos ---------- */
 function drawInv(){
-  drawInter();
+  drawInter();drawCarteira();
   const a=sums(base({month:'all',cat:'all'}));
-  const xpEnv=base({month:'all',cat:'all'}).filter(t=>isXP(t)&&t.type==='aporte').reduce((x,t)=>x+t.v,0);
-  $('flux-note').textContent=`Em ${S.year}: ${fmt(a.inv)} investidos (${fmt(a.inv-xpEnv)} em CDB e fundos do Inter, ${fmt(xpEnv)} enviados para a XP) e ${fmt(a.res)} resgatados.`;
+  $('flux-note').textContent=`Em ${S.year}: ${fmt(a.inv)} aplicados e ${fmt(a.res)} resgatados. Envios para a XP contam quando o dinheiro sai do Inter, mesmo que ainda esteja parado na conta de lá.`;
   $('src-inter').textContent=`${tx.length.toLocaleString('pt-BR')} transações de ${PRIMEIRO.toLocaleDateString('pt-BR')} a ${HOJE.toLocaleDateString('pt-BR')}.`;
   if(!XP){$('xp-sec').hidden=true;return}
   const P=XP.performance,xm=XP.mensal;
@@ -545,23 +589,78 @@ async function initLocal(){
   $('sync-btn').addEventListener('click',async()=>{try{await api('/api/sincronizar',{});poll()}catch(e){rmsg(e.message,true)}});
 }
 
-const invTotal=()=>(INV?INV.total:0)+(XP?XP.patrimonio:0);
+/* ---------- carteira consolidada: todos os ativos juntos, sem separar por banco ---------- */
+const CLASSES={'Renda fixa':'--p3','Tesouro Direto':'--p6','Ações':'--p1','Fundos':'--p4','Cripto':'--p7','Caixa na corretora':'--p9'};
+let CLS=null;  // classe escolhida no gráfico de alocação
+function ativos(){
+  const L=[],cls=c=>/renda fixa/i.test(c)?'Renda fixa':c;
+  if(INV)INV.posicoes.forEach(p=>L.push({nome:p.produto,classe:cls(p.classe),onde:'Inter',valor:p.valor,aplicado:p.aplicado,info:p.info}));
+  if(XP){
+    XP.posicoes.forEach(p=>L.push({nome:p.ativo,classe:cls(p.classe),onde:'XP',valor:p.valor,aplicado:p.aplicado,info:[p.sub,p.info].filter(Boolean).join(' · ')}));
+    if(XP.saldo_conta>0)L.push({nome:'Saldo parado na conta da XP',classe:'Caixa na corretora',onde:'XP',valor:XP.saldo_conta,aplicado:null,info:'Ainda não aplicado em nenhum produto'});
+  }
+  FORA.forEach(f=>L.push({nome:f.produto.replace(' (Inter)',''),classe:f.produto.startsWith('Tesouro')?'Tesouro Direto':'Cripto',onde:'Inter',valor:f.aplicado,aplicado:f.aplicado,custo:true,
+    info:'A preço de custo: o Open Finance ainda não informa a cotação'}));
+  const tot=L.reduce((x,a)=>x+a.valor,0);
+  L.forEach(a=>{a.peso=tot?a.valor/tot:0;a.ganho=a.custo||a.aplicado==null?null:a.valor-a.aplicado;a.pct=a.ganho==null||!a.aplicado?null:a.ganho/a.aplicado});
+  return L;
+}
+function classes(){
+  const g={};ativos().forEach(a=>{const c=(g[a.classe]??={nome:a.classe,valor:0,peso:0,cor:CLASSES[a.classe]||'--p9'});c.valor+=a.valor;c.peso+=a.peso});
+  return Object.values(g).sort((a,b)=>b.valor-a.valor);
+}
+function drawCarteira(){
+  if(!$('inv-hero'))return;
+  const L=ativos();
+  if(!L.length){$('inv-hero').innerHTML='<p class="empty-msg">Nenhum investimento importado ainda.</p>';return}
+  const tot=L.reduce((x,a)=>x+a.valor,0),comG=L.filter(a=>a.ganho!=null);
+  const apl=comG.reduce((x,a)=>x+a.aplicado,0),ganho=comG.reduce((x,a)=>x+a.ganho,0);
+  const rk=L.filter(a=>a.pct!=null).sort((a,b)=>b.pct-a.pct),top=rk[0],bot=rk[rk.length-1];
+  const r12=rend12Inter()+(XP?XP.performance.doze_meses.rendimento:0);
+  const card=(cls,l,v,s)=>`<div class="hc ${cls}"><span class="eyebrow">${l}</span><span class="val">${v}</span><span class="sub">${s}</span></div>`;
+  $('inv-hero').innerHTML=
+    card('lead','Patrimônio investido',fmt(tot),`${L.length} ativos em ${classes().length} classes · Inter e XP somados`)+
+    card('','Ganho sobre o aplicado',`<span class="${cl(ganho)}">${sgn(ganho)}</span>`,`${pctN(ganho/apl*100)} sobre ${fmt(apl)} aplicados nas posições abertas`)+
+    card('',`Rendimento em 12 meses`,`<span class="${cl(r12)}">${sgn(r12)}</span>`,IND?`CDI no período: ${pctN(IND.cdi_12m)} · IPCA: ${pctN(IND.ipca_12m)}`:'Variação do patrimônio menos os aportes')+
+    (top?card('best','Ativo que mais valorizou',`${esc(top.nome)}`,`<b class="${cl(top.pct)}">${sgn(top.ganho)} (${pctN(top.pct*100)})</b> · ${top.onde}`):'')+
+    (bot&&bot!==top?card('worst',bot.pct<0?'Ativo que mais caiu':'Menor rentabilidade',`${esc(bot.nome)}`,`<b class="${cl(bot.pct)}">${sgn(bot.ganho)} (${pctN(bot.pct*100)})</b> · ${bot.onde}`):'');
+  // legenda da alocação
+  $('aloc-l').innerHTML=classes().map(c=>`<button type="button" class="al ${CLS&&CLS!==c.nome?'off':''}" data-c="${esc(c.nome)}"><i style="background:var(${c.cor})"></i><span>${esc(c.nome)}</span><b class="num">${pct(c.peso)}</b><small class="num">${fmt(c.valor)}</small></button>`).join('');
+  // tabela de ativos
+  const ord=$('ativos-ordem').value,nul=v=>v==null?-Infinity:v;
+  const vis=L.filter(a=>!CLS||a.classe===CLS).sort(ord==='nome'?(a,b)=>a.nome.localeCompare(b.nome):(a,b)=>nul(b[ord])-nul(a[ord]));
+  const maxP=Math.max(...L.map(a=>a.peso));
+  $('t-ativos').textContent=CLS?`Seus ativos · ${CLS}`:'Seus ativos';
+  $('ativos-limpar').hidden=!CLS;
+  $('ativos').innerHTML='<thead><tr><th>Ativo</th><th>Classe</th><th class="v">Aplicado</th><th class="v">Valor hoje</th><th class="v">Resultado</th><th class="v">Peso na carteira</th></tr></thead><tbody>'+
+    vis.map(a=>`<tr><td><div class="at-n">${esc(a.nome)} <span class="onde">${a.onde}</span></div><div class="at-i">${esc(a.info)}</div></td>
+      <td><span class="cl-dot" style="background:var(${CLASSES[a.classe]||'--p9'})"></span>${esc(a.classe)}</td>
+      <td class="v">${a.aplicado==null?'—':fmt(a.aplicado)}</td><td class="v"><b>${fmt(a.valor)}</b></td>
+      <td class="v ${a.ganho==null?'':cl(a.ganho)}">${a.ganho==null?'<span class="at-i">'+(a.custo?'sem cotação':'—')+'</span>':`${sgn(a.ganho)}<div class="at-p">${a.pct==null?'':pctN(a.pct*100)}</div>`}</td>
+      <td class="v"><div class="peso"><span class="num">${pct(a.peso)}</span><span class="pb"><span style="width:${a.peso/maxP*100}%;background:var(${CLASSES[a.classe]||'--p9'})"></span></span></div></td></tr>`).join('')+'</tbody>';
+  $('ativos-note').textContent=`Resultado = valor hoje − valor aplicado em cada posição aberta, antes do IR. Não inclui proventos já recebidos nem o que foi ganho em aplicações já resgatadas. Posições do Inter de ${INV?dmY(INV.atualizado_em):'—'} e da XP de ${XP?dmY(XP.atualizado_em):'—'}.`;
+}
+$('ativos-ordem').addEventListener('change',drawCarteira);
+$('ativos-limpar').addEventListener('click',()=>{CLS=null;drawCarteira();drawCharts()});
+$('aloc-l').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;CLS=CLS===b.dataset.c?null:b.dataset.c;drawCarteira();drawCharts()});
+// sub-abas: Carteira (tudo junto), Inter, XP e Radar B3
+let SUB=(()=>{try{return localStorage.getItem('lc-inv-sub')||'carteira'}catch(e){return 'carteira'}})();
+function mostrarSub(){
+  document.querySelectorAll('[data-sub]').forEach(el=>el.hidden=el.dataset.sub!==SUB);
+  $('inv-sub').querySelectorAll('button').forEach(b=>{b.setAttribute('aria-pressed',b.dataset.v===SUB);b.setAttribute('aria-selected',b.dataset.v===SUB)});
+}
+$('inv-sub').addEventListener('click',e=>{const b=e.target.closest('button');if(!b||b.dataset.v===SUB)return;SUB=b.dataset.v;
+  try{localStorage.setItem('lc-inv-sub',SUB)}catch(e){}
+  mostrarSub();drawCharts()});
+mostrarSub();
+
+const invTotal=()=>(INV?INV.total:0)+(XP?XP.patrimonio:0)+foraTotal();
 const rend12Inter=()=>INV?INV.mensal.slice(-12).reduce((x,m)=>x+(m.rendimento||0),0):0;
 function drawInter(){
-  const it=tx.filter(t=>t.cat==='Investimentos'&&!isXP(t)),anos={};
+  const it=tx.filter(t=>t.cat==='Investimentos'&&!isXP(t)&&!isFora(t)),anos={};
   for(const t of it){const y=(anos[t.ds.slice(0,4)]??={ap:0,res:0});if(t.type==='aporte')y.ap+=t.v;else y.res+=t.v}
   $('inter-anos').innerHTML='<thead><tr><th>Ano</th><th class="v">Aplicado</th><th class="v">Resgatado</th><th class="v">Saldo do ano</th></tr></thead><tbody>'+
     Object.entries(anos).sort().map(([y,a])=>`<tr><td>${y}</td><td class="v">${fmt(a.ap)}</td><td class="v">${fmt(a.res)}</td><td class="v">${sgn(a.ap-a.res)}</td></tr>`).join('')+'</tbody>';
-  // resumo Inter + XP
-  const r12=rend12Inter()+(XP?XP.performance.doze_meses.rendimento:0);
-  $('inv-stats').innerHTML=[
-    ['Total investido hoje',fmt(invTotal()),'Inter + XP, a valor de mercado'],
-    ['No Inter',INV?fmt(INV.total):'—',INV?pct(INV.total/invTotal())+' do total':'Posição não importada'],
-    ['Na XP',XP?fmt(XP.patrimonio):'—',XP?pct(XP.patrimonio/invTotal())+' do total':'XP não importada'],
-    ['Rendimento em 12 meses',`<span class="${cl(r12)}">${sgn(r12)}</span>`,`Inter ${sgn(rend12Inter())} · XP ${XP?sgn(XP.performance.doze_meses.rendimento):'—'}`],
-    ...(IND?[['CDI e IPCA em 12 meses',`${pctN(IND.cdi_12m)} · ${pctN(IND.ipca_12m)}`,`Referência do Banco Central · CDI até ${dmY(IND.cdi_ate)}, IPCA até ${mesAno(IND.ipca_ate+'-01')}`]]:[])
-  ].map(([l,v,s])=>`<div class="st"><span class="eyebrow">${l}</span><b>${v}</b><span>${s}</span></div>`).join('');
-  $('inv-ref').textContent=INV?`Posição de ${dmY(INV.atualizado_em)}`:'';
   if(!INV){$('inter-stats').innerHTML='';$('inter-pos').innerHTML='<p class="empty-msg">Posição do Inter ainda não importada.</p>';return}
   const P=INV.posicoes,val=P.reduce((x,p)=>x+p.valor,0),apl=P.reduce((x,p)=>x+p.aplicado,0),liq=P.reduce((x,p)=>x+p.liquido,0),imp=P.reduce((x,p)=>x+p.impostos,0),r=val-apl;
   $('inter-stats').innerHTML=[
